@@ -4991,7 +4991,9 @@
   };
 
   const seeAllLoadMeta = async () => {
-    if (!window.catalogue) return null;
+    // Continue Watching is the page's own ten, not a catalogue list: there is
+    // nothing for genres or years to cut, so it opens without the filter bar.
+    if (!window.catalogue || seeAllState.section === 'continue-watching') return null;
     const section = seeAllState.section;
     if (seeAllMeta && seeAllMetaSection === section) return seeAllMeta;
     if (seeAllMetaTried === section) return null;
@@ -5155,6 +5157,13 @@
   // title by what that title already carries as the row is walked.
   const seeAllQuery = async (section, offset, limit) => {
     if (!window.catalogue) return null;
+    // Continue Watching is the row itself: ten titles on the page, with no
+    // catalogue feed behind them. Its grid is those ten, and that is the end of
+    // the list — there is no page to fetch for the row that has no source.
+    if (section === 'continue-watching') {
+      const items = rowItems.get(section) || [];
+      return { items: items.slice(offset, offset + limit), hasMore: items.length > offset + limit };
+    }
     const filtered = seeAllFiltered() || section === 'search';
     try {
       // A search is its own list: the bar's cuts are not on it, and the query
