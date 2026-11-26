@@ -480,6 +480,11 @@
         if (claims.has(key) || comingKeys.has(key) || !goesToUpcoming(item)) return;
         comingKeys.add(key);
         claims.add(key);
+        // Upcoming comes from the coming-soon list and from the rows' own
+        // cast-offs, not from the row walk — so it carries no deferred mark of
+        // its own. Without one the cards are never asked for their details and
+        // every cover stays the textless list art under a caption.
+        item.deferred = true;
         coming.push(item);
       });
     };
@@ -538,7 +543,10 @@
       try {
         list = await fetchList(name, page);
       } catch (error) {
-        state.done = true;
+        // A page that failed is not the end of the list: TMDB refusing one
+        // request (a rate limit, a dropped connection) used to mark the walk
+        // finished for good, which is what stopped a grid at a few hundred
+        // titles. The page is asked for again by the next batch instead.
         break;
       }
       state.pages = page;
@@ -552,16 +560,20 @@
         state.done = state.done || false;
       });
     }
+    // The walk has a ceiling of its own: once it is reached there is nothing
+    // further to ask for, and the grid has to hear that rather than keep asking.
+    if (state.pages >= 40) state.done = true;
     return state.items;
   };
 
   const section = async (name, offset, limit) => {
-    if (name === UPCOMING) {
-      const items = await growSection(name, offset + limit);
-      return { items: items.slice(offset, offset + limit), hasMore: items.length > offset + limit };
-    }
     const items = await growSection(name, offset + limit);
-    return { items: items.slice(offset, offset + limit), hasMore: items.length > offset + limit };
+    // "No more after this" is the list being finished, not this window coming
+    // back short: a page that failed returns fewer titles than asked for, and
+    // reading that as the end of the row is what closed a grid at a few hundred
+    // covers. The next ask picks the failed page up again.
+    const more = items.length > offset + limit || !walk(name).done;
+    return { items: items.slice(offset, offset + limit), hasMore: more };
   };
 
   // ── Search ───────────────────────────────────────────────────────────────
