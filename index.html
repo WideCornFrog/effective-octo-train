@@ -1585,6 +1585,12 @@
         const held = track.id === 'see-all-grid' ? withinGrid(box) : withinHold(box);
         if (!held) {
           if (image.getAttribute('src')) parked.push(image);
+          // Out of the band the card keeps its small file on the frame: the
+          // shelf is dressed before it is reached, instead of being a dark row
+          // that changes into its titled covers in front of the reader.
+          const frame = image.parentElement;
+          const low = image.dataset.low || '';
+          if (frame && low) frame.style.backgroundImage = `url("${low}")`;
           continue;
         }
         // In the window, or waiting its turn either side of it. A card that is
@@ -1671,6 +1677,16 @@
     // Parked after the queues are built: handing a picture back frees a slot,
     // which starts the pump, and the pump reads the queues this loop fills.
     parked.forEach(parkArt);
+    // A card far below the fold hands its decoded picture back, but not its
+    // look: the small file stays on the frame, so the shelf is already dressed
+    // — title in the art, no caption — before it is scrolled to. It used to be
+    // taken away with the big one, which is why a row only turned into its
+    // titled covers in front of the reader.
+    parked.forEach((image) => {
+      const frame = image.parentElement;
+      const low = image.dataset.low || '';
+      if (frame && low) frame.style.backgroundImage = `url("${low}")`;
+    });
     pumpArt(cap);
   };
 
@@ -1933,12 +1949,34 @@
     scheduleArt();
   };
 
+  // Every painted card on the shelves, not just the band around the fold: a row
+  // four screens down that still holds the list page's textless still and a
+  // caption until it is scrolled to is a shelf changing under the reader at the
+  // moment they arrive. The lookups are one request per title either way; this
+  // spends them in the quiet after the page is up instead of in front of it.
+  const dressShelves = () => {
+    if (!revealed) return;
+    let added = false;
+    for (const card of document.querySelectorAll('.row:not(.seeall) .card')) {
+      const item = card.__item;
+      if (!item || !item.deferred || item.facts || card.__asked) continue;
+      // The ring, not the screen's own queue: a card the reader has just
+      // scrolled to still goes first, and the shelves below are dressed in the
+      // quiet between one screenful and the next.
+      card.__asked = true;
+      detailRing.push(card);
+      added = true;
+    }
+    if (added) scheduleDetails();
+  };
+
   // One request for the screenful, then the next one: the chain ends when the
   // screen has nothing left without its details, so it cannot keep asking.
   const flushDetails = () => {
     detailTimer = 0;
     if (detailBusy) return;
     collectVisibleDetails();
+    dressShelves();
     // The ring waits for the page to be up. Its forty lookups and forty pictures
     // would otherwise be running against the screen's own while the loader is
     // still waiting on them, and the first paint is the thing this is for.
