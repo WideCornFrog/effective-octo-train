@@ -35,6 +35,10 @@
     'popular-tv': [['/tv/popular', {}, 'tv']],
     'top-movies': [['/movie/top_rated', {}, 'movie']],
     'top-tv': [['/tv/top_rated', {}, 'tv']],
+    // Upcoming's shelf is assembled from the rows' cast-offs and this same
+    // coming-soon feed; See all walks the feed so the grid can keep going past
+    // the fifty the shelf holds.
+    'upcoming': [['/movie/upcoming', {}, 'movie']],
     'popular-anime': [
       ['/discover/tv', { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc' }, 'tv'],
       ['/discover/tv', { with_genres: '16', with_origin_country: 'CN|HK|TW', sort_by: 'popularity.desc' }, 'tv'],
@@ -665,9 +669,14 @@
     return blocked;
   };
 
+  // TMDB serves list pages up to page 500. The walk used to stop at forty,
+  // which put "That's the whole list" under the first few hundred covers of a
+  // list that had thousands left. The ceiling is TMDB's, not a reading budget.
+  const WALK_PAGES = 500;
+
   const growSection = async (name, want) => {
     const state = walk(name);
-    while (state.items.length < want && state.pages < 40 && !state.done) {
+    while (state.items.length < want && state.pages < WALK_PAGES && !state.done) {
       const page = state.pages + 1;
       let list;
       try {
@@ -692,7 +701,7 @@
     }
     // The walk has a ceiling of its own: once it is reached there is nothing
     // further to ask for, and the grid has to hear that rather than keep asking.
-    if (state.pages >= 40) state.done = true;
+    if (state.pages >= WALK_PAGES) state.done = true;
     return state.items;
   };
 
