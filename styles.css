@@ -1678,8 +1678,9 @@ body.is-row-dragging #card-preview { pointer-events: none; }
 
 /* ── Live TV notice ──────────────────────────────────────── */
 /* Native modal dialog: it sits in the top layer, so the app's clipped
-   overflow does not affect it. */
-.notice {
+   overflow does not affect it. Scoped to the dialog: the key notice below is a
+   plain block and must not inherit this box — or, worse, hide the dialog. */
+dialog.notice {
   width: min(420px, calc(100vw - 48px));
   padding: 26px 28px 22px;
   border: 0;
@@ -1689,7 +1690,7 @@ body.is-row-dragging #card-preview { pointer-events: none; }
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
 
-.notice::backdrop { background: rgba(6, 6, 6, 0.64); }
+dialog.notice::backdrop { background: rgba(6, 6, 6, 0.64); }
 
 .notice__title {
   font-size: 20px;
@@ -1712,7 +1713,7 @@ body.is-row-dragging #card-preview { pointer-events: none; }
 
 /* The dialog autofocuses its close button, so give it the accent ring rather
    than the browser's default blue. */
-.notice :focus-visible {
+dialog.notice :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -2895,7 +2896,7 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
    A static build fetches TMDB from the page, so without a key there is no
    catalogue behind it. This is what stands where the wheel
    would otherwise turn forever. */
-.notice {
+.notice--setup {
   display: none;
   max-width: 420px;
   margin: 96px auto 120px;
@@ -2906,7 +2907,7 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
   text-align: center;
 }
 
-body.is-unconfigured .notice {
+body.is-unconfigured .notice--setup {
   display: block;
 }
 
@@ -2914,20 +2915,20 @@ body.is-unconfigured .loader {
   display: none;
 }
 
-.notice__title {
+.notice--setup .notice__title {
   margin: 0 0 10px;
   font-size: 20px;
   font-weight: 600;
 }
 
-.notice__body {
+.notice--setup .notice__body {
   margin: 0;
   color: rgba(255, 255, 255, 0.62);
   font-size: 14px;
   line-height: 1.6;
 }
 
-.notice__body code {
+.notice--setup .notice__body code {
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
