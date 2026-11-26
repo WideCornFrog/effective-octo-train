@@ -3344,8 +3344,12 @@
   };
 
   // A picture that never arrives is the same as one that arrives late: the wait
-  // is capped, so a broken URL cannot leave the page behind the loader.
-  const ART_WAIT_MS = 4000;
+  // is capped, so a broken URL cannot leave the page behind its loader. The cap
+  // sits well past a slow link's answer on purpose — the page is waiting for the
+  // titled artwork of every card the reader will see, and on a phone connection
+  // that is seconds, not frames. A file that really is gone stops waiting on its
+  // own: three failed tries mark the card dead, which the gate reads as settled.
+  const ART_WAIT_MS = 15000;
 
   const decodeSources = (sources) => Promise.all(sources.map((source) => new Promise((done) => {
     const image = new Image();
@@ -3378,10 +3382,12 @@
       : [];
     const started = performance.now();
     artPending = true;
-    // The billboard is decoded in the same breath, but it does not hold the page:
-    // it fades up from black on its own once the file is there, which is the
-    // whole point of that fade.
-    decodeSources(heroArt);
+    // The billboard's artwork is part of what the page waits on. It used to fade
+    // up from black behind the loader on its own, which on a slow link meant the
+    // page showed itself with the frame's picture still missing; the reveal is
+    // the one moment the reader is promised a dressed screen.
+    let heroReady = !heroArt.length;
+    decodeSources(heroArt).then(() => { heroReady = true; });
     const step = () => {
       // The whole screenful in flight, not the idle batch: 32 at a time is what
       // gets every visible card its source before the page shows itself.
@@ -3404,7 +3410,7 @@
       // repaint: waiting for the ones asked for is the difference between the
       // page showing itself settled and showing itself a frame before it is.
       const waiting = detailBusy || detailQueue.length > 0;
-      const ready = !waiting && dressed && cards.every((card) => {
+      const ready = heroReady && !waiting && dressed && cards.every((card) => {
         const image = card.querySelector('img[data-src]');
         const item = card.__item;
         if (!image) return !item || !item.still || Boolean(item.dead);
@@ -4290,7 +4296,11 @@
     // The last stage is the whole catalogue: every shelf is as long as it will
     // get, so each row can stop holding its stand-in for the real last title.
     if (!data.partial) rowModels.forEach((model) => model.settle?.());
-    if (!data.append) revealWhenArtReady();
+    // Only the last stage lifts the loader. The first one carries a single shelf
+    // and the billboard; showing the page on it is what put the reader in front
+    // of a screen that filled in shelf by shelf, card by card. Every stage stays
+    // behind the wheel until the catalogue is whole and its screenful is dressed.
+    if (!data.partial) revealWhenArtReady();
   };
 
   // The catalogue is built in the page: two stages — the first screen, then the
@@ -4304,13 +4314,22 @@
       reveal();
       return;
     }
+    // The loader now waits for the whole catalogue, so a request that never
+    // answers must not hold it forever: a dropped connection is not a catalogue,
+    // and the page shows what painted rather than sitting behind its wheel.
+    const guard = setTimeout(() => { if (!revealed) reveal(); }, 25000);
     window.catalogue.catalogue(acceptLine)
       .then(() => {
+        clearTimeout(guard);
         if (!artPending) reveal();
       })
       .catch((error) => {
+        clearTimeout(guard);
         console.info('[streamflix] catalogue failed —', error.message);
-        document.body.classList.add('is-unconfigured');
+        // A failure after the billboard has painted is not a missing key: the
+        // page shows the shelves it has instead of the setup notice over a
+        // catalogue that is already on screen behind the loader.
+        if (heroPending) document.body.classList.add('is-unconfigured');
         document.body.classList.remove('is-hero-pending', 'is-rows-pending');
         reveal();
       });
@@ -4961,6 +4980,144 @@
         watch.disconnect();
         done();
       }, 9000);
+    });
+  };
+
+  const seeAllQueued = () => seeAllState.queue.reduce(
+    (total, batch) => total + batch.items.length, 0
+  );
+
+  const seeAllBatchPending = () => {
+    let pending = false;
+    for (const card of seeAllState.pending) {
+      if (!card.isConnected) {
+        seeAllState.pending.delete(card);
+        continue;
+      }
+      const image = card.querySelector('img');
+      if (!image || image.dataset.dead) continue;
+      if (!image.getAttribute('src')) {
+        pending = true;
+        break;
+      }
+    }
+    if (!pending) {
+      seeAllState.pending.clear();
+      return false;
+    }
+    if (performance.now() - seeAllState.pendingFrom > ART_WAIT_MS) {
+      seeAllState.pending.clear();
+      return false;
+    }
+    return true;
+  };
+
+  const waitForCold = (then) => {
+    clearTimeout(moreTimer);
+    moreTimer = 0;
+    seeAllMoreWrap.hidden = false;
+    if (!seeAllMoreWrap.classList.contains('is-waiting')) {
+      seeAllMoreWrap.classList.add('is-waiting');
+      // One wait per run of batches: a stream of merges cannot hold the wheel up
+      // past the same ceiling a single one is given.
+      seeAllState.waitFrom = performance.now();
+    }
+    const step = () => {
+      moreTimer = 0;
+      if (!document.body.classList.contains('is-seeing-all')) return;
+      // The wheel is up for as long as the batch on the grid is still finding its
+      // pictures. The cards are already in place, dressed one by one as the files
+      // land, so there is no hidden stretch under the reader and nothing to wait
+      // for before the next batch is read.
+      if (!seeAllBatchPending() || performance.now() - seeAllState.waitFrom > ART_WAIT_MS) {
+        seeAllMoreWrap.classList.remove('is-waiting');
+        if (then) then();
+        // A reader who was already at the bottom when the batch landed is still
+        // at the bottom, and the scroll has nothing new to report: ask again.
+        setTimeout(seeAllCheck, 120);
+        return;
+      }
+      moreTimer = setTimeout(step, 90);
+    };
+    moreTimer = setTimeout(step, 90);
+  };
+
+  const seeAllMergePage = async () => {
+    if (!document.body.classList.contains('is-seeing-all')) return;
+    if (seeAllState.busy || seeAllState.done) return;
+    const gen = seeAllState.gen;
+    // The batch already on the grid is painted before the next one is read: the
+    // reader reaches the end of the dressed cards, finds the wheel, and waits for
+    // the pictures they already have rather than for more empty ones.
+    if (seeAllBatchPending()) {
+      clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(seeAllCheck, 250);
+      return;
+    }
+    const section = seeAllState.section;
+    let batch = seeAllState.queue.shift();
+    if (!batch && seeAllState.inflight) {
+      // Already on its way: wait for that read rather than asking again.
+      seeAllWaiting(true);
+      seeAllState.busy = true;
+      await seeAllState.inflight;
+      seeAllState.busy = false;
+      if (seeAllState.gen !== gen || seeAllState.section !== section || seeAllState.done) return;
+      batch = seeAllState.queue.shift();
+    }
+    if (!batch) {
+      if (!seeAllState.hasMore) {
+        seeAllDone();
+        return;
+      }
+      // Read this far before the preload was ready: the slot's wheel is what
+      // stands in for the wait.
+      seeAllWaiting(true);
+      seeAllState.busy = true;
+      batch = await seeAllQuery(section, seeAllState.offset, SEE_ALL_CHUNK);
+      seeAllState.busy = false;
+      // An answer for a section the reader has already left, or for cuts that
+      // have since been changed, is dropped.
+      if (seeAllState.gen !== gen || seeAllState.section !== section || seeAllState.done) return;
+      if (!batch) {
+        seeAllWaiting(false);
+        return;
+      }
+    }
+    if (!batch.items.length) {
+      if (batch.hasMore) {
+        // These pages held nothing for the cut and the row goes on: ask for the
+        // next ones rather than calling the list finished.
+        seeAllState.hasMore = true;
+        seeAllWaiting(true);
+        clearTimeout(pendingTimer);
+        pendingTimer = setTimeout(seeAllCheck, 300);
+        return;
+      }
+      seeAllState.hasMore = false;
+      seeAllDone();
+      return;
+    }
+    // Facts first, behind the wheel: the batch lands wearing its titled artwork,
+    // so no card on the grid appears in one picture and turns into another.
+    seeAllWaiting(true);
+    await seeAllWarm(batch.items);
+    if (seeAllState.gen !== gen || seeAllState.section !== section || seeAllState.done) return;
+    seeAllPaint(batch.items);
+    seeAllState.hasMore = batch.hasMore;
+    // The covers land behind the wheel; the end of the list, if this was the
+    // last batch, follows them.
+    waitForCold(() => {
+      if (!seeAllState.hasMore) seeAllDone();
+    });
+    seeAllPreload();
+  };
+
+  const seeAllMerge = () => {
+    if (seeAllState.merging) return Promise.resolve();
+    seeAllState.merging = true;
+    return seeAllMergePage().finally(() => {
+      seeAllState.merging = false;
     });
   };
 
