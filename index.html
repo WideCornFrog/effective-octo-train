@@ -1398,8 +1398,12 @@
   // browser opens at most six connections to one origin anyway, so the number
   // that matters here is how many pictures are asked for at once: sixteen keeps
   // the screenful moving while staying inside the published twenty.
+  // image.tmdb.org publishes no request rate — only a ceiling of twenty
+  // simultaneous connections per address. The screenful is held at that ceiling
+  // and the ring below it, so the pictures never ask for more than the CDN
+  // allows; the API's own limits are the queue in tmdb.js, not this pump.
   const ART_BATCH = 8;      // pictures in flight for the off-screen ring
-  const ART_SCREEN = 16;    // the screenful the page waits on before it shows
+  const ART_SCREEN = 20;    // the screenful the page waits on before it shows
   // How far from the fold a picture is kept. A decoded card is ~260KB of VRAM,
   // and a shelf four screens down is not being looked at: its art is handed back
   // (the URL stays on the card) and asked for again out of this session's cache
@@ -4349,6 +4353,12 @@
       return;
     }
     applyCatalog(data);
+    // The cards just painted start their detail lookups at once, in the middle
+    // of the catalogue rather than after it. Each shelf is one request per
+    // title, so running them beside the next row's pages is what shortens the
+    // first paint; waiting for the last stage and then asking for all of them
+    // spent the catalogue's own time and the details' time one after the other.
+    dressShelves();
     // The last stage is the whole catalogue: every shelf is as long as it will
     // get, so each row can stop holding its stand-in for the real last title.
     if (!data.partial) rowModels.forEach((model) => model.settle?.());
