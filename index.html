@@ -4360,6 +4360,13 @@
   const seeAllMoreWrap = document.getElementById('see-all-more-wrap');
   const seeAllEndNote = document.getElementById('see-all-end');
   const seeAllEmpty = document.getElementById('see-all-empty');
+  // How long one batch of the grid waits for its pictures before the next one is
+  // read. The page's own reveal may wait much longer (ART_WAIT_MS) because it is
+  // the one moment the reader is promised a dressed screen; a grid is read as it
+  // goes, and a batch that holds the next one up for fifteen seconds is a wall
+  // the reader hits at the bottom of every screenful.
+  const GRID_WAIT_MS = 4000;
+
   const seeAllState = {
     section: '', offset: 0, hasMore: true, busy: false,
     queue: [], fetching: false, inflight: null, scrolled: false, done: false,
@@ -5005,7 +5012,7 @@
       seeAllState.pending.clear();
       return false;
     }
-    if (performance.now() - seeAllState.pendingFrom > ART_WAIT_MS) {
+    if (performance.now() - seeAllState.pendingFrom > GRID_WAIT_MS) {
       seeAllState.pending.clear();
       return false;
     }
@@ -5029,7 +5036,7 @@
       // pictures. The cards are already in place, dressed one by one as the files
       // land, so there is no hidden stretch under the reader and nothing to wait
       // for before the next batch is read.
-      if (!seeAllBatchPending() || performance.now() - seeAllState.waitFrom > ART_WAIT_MS) {
+      if (!seeAllBatchPending() || performance.now() - seeAllState.waitFrom > GRID_WAIT_MS) {
         seeAllMoreWrap.classList.remove('is-waiting');
         if (then) then();
         // A reader who was already at the bottom when the batch landed is still
