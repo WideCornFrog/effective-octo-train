@@ -1,0 +1,2935 @@
+:root {
+  /* One grey for the page, the account pill and both top-bar menus: a panel
+     that opens over the app is the same material, not a lighter layer on it. */
+  --app-bg: #000000;
+  --surface: #131313;
+  /* Buttons are the one thing that has to lift off that page, or a pill reads
+     as plain text: the same dark surface, one step up. */
+  --surface-lift: #1c1c1c;
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.74);
+  --text-faint: rgba(255, 255, 255, 0.55);
+  --hairline: rgba(255, 255, 255, 0.26);
+  --hairline-soft: rgba(255, 255, 255, 0.14);
+  /* One red for every accent use, including the filled CTA (4.8:1 on white text). */
+  --accent: #d92f2a;
+  --accent-hover: #e03130;
+  /* Hover vocabulary: surfaces tint with a soft red and hairlines switch to
+     the accent, so every interactive element answers in the same red. */
+  --accent-soft: rgba(217, 47, 42, 0.18);
+  --accent-line: rgba(217, 47, 42, 0.62);
+  /* Frosted control fill: a translucent white wash with no stroke,
+     shared by the hero and row buttons. */
+  --glass: rgba(255, 255, 255, 0.09);
+
+  --pad-x: 68px;
+  --radius-app: 0px;
+  --radius-card: 14px;
+  --gap: 16px;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+/* The page is locked while the shelf loads and released when it appears, and a
+   released page grows a scrollbar — fifteen pixels off the width, which every
+   row would then have to re-measure and re-place. The gutter is reserved in
+   both states instead, so nothing moves at the moment of the reveal. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* The app is the window: no page frame, no gutter, no letterbox. */
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: "Inter", "Poppins", system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+h1, h2, h3, p { margin: 0; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Inline icon defaults: stroke icons everywhere, unless overridden. */
+svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── App shell ───────────────────────────────────────────── */
+
+/* Icon definitions: the sprite holds the glyphs and draws none of them. */
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.app {
+  position: relative;
+  width: 100%;
+  /* Fills the window in both directions: the shell never floats in a page
+     and never ends short of the bottom edge. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* clip, not hidden: hidden would make this a scroll container, and the See all
+     bar inside it would then stick to a box that never scrolls — it scrolled
+     away with the grid. clip still cuts what leaves the shell, without one. */
+  overflow: clip;
+  border: 0;
+  border-radius: var(--radius-app);
+  background: var(--app-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top bar (floats over the hero) ──────────────────────── */
+
+/* Full-width bar. The wordmark is absolutely centred on the window's
+   midpoint and both side groups are pinned to equal 19px ink insets,
+   so the space either side of the wordmark matches exactly. It is fixed to
+   the window, so it survives scrolling without moving the page under it. */
+/* ── The page's scrollbar ───────────────────────────────────── */
+/* The system's white bar is the one piece of the window the app does not draw, and
+   beside a black page it reads as something parked on top of the app.
+   Two mechanisms, because no single one covers every engine: the standard pair
+   below is what Chromium 121+, Firefox and Safari 18.2+ take, and it is the only
+   thing that tints the overlay scrollbars macOS and iOS draw — those ignore the
+   ::-webkit- pseudos entirely, which is why a page styled only with them still
+   shows the system's light pill there. The pseudos stay for the engines that
+   ignore the standard properties, and give the bar its 10px rail and floating
+   round thumb where they do apply. */
+html {
+  /* The canvas is the app's black before the app paints: a transparent root lets a
+     light default show through the scrollbar's own track. */
+  background: var(--app-bg);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.24) var(--app-bg);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-button { display: none; height: 0; }
+::-webkit-scrollbar-track { background: var(--app-bg); }
+::-webkit-scrollbar-corner { background: var(--app-bg); }
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
+  background-clip: padding-box;
+}
+
+.topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 13px 13px 22px 14px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Over the hero the bar stays clear; once the page scrolls under it, it goes
+   fully opaque — the app background itself, no alpha — so card art never shows
+   through the labels. The hairline is what separates the bar from the rows. */
+.topbar.is-pinned {
+  background: var(--app-bg);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* In the grid the top bar sits straight on the filter bar and the two of them are
+   one block: the filter bar draws the only line under them, so the top bar's own
+   hairline is dropped instead of leaving two dividers a row apart. */
+body.is-seeing-all .topbar.is-pinned {
+  box-shadow: none;
+}
+
+/* And in the grid the bar is never over artwork of its own — the hero is gone and
+   what sits behind it is card art scrolling past — so it takes its fill from the
+   first frame. The scroll listener cannot be the only thing that makes it solid:
+   a grid scrolled by anything other than the window would leave the cards showing
+   through the labels. */
+body.is-seeing-all .topbar {
+  background: var(--app-bg);
+}
+
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  gap: 21px;
+}
+
+.nav-link {
+  position: relative;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.92;
+  white-space: nowrap;
+  transition: color 0.16s ease, opacity 0.16s ease, transform 0.18s ease;
+}
+
+/* Same hover as the wordmark: the label lifts to the accent and grows a
+   little. Transform does not affect layout, so the nav never shifts. */
+.nav-link:hover {
+  opacity: 1;
+  color: var(--accent);
+  transform: scale(1.08);
+}
+
+/* Current section, marked with the accent. */
+.nav-link.nav-link--active {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Underline geometry for a nav item: drawn only while it is the current
+   section. Hover just turns the label accent. */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.nav-link.nav-link--active::after { opacity: 1; }
+
+/* Same underline as a selected nav item: drawn only while Home is the
+   current view. */
+.brand::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.brand.brand--active::after { opacity: 1; }
+
+/* See all is a view of its own, not the home page: the wordmark keeps its
+   colour but loses the underline while a row's grid is what is being read. */
+body.is-seeing-all .brand::after { opacity: 0; }
+
+.icon-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  transition: color 0.16s ease, transform 0.18s ease;
+}
+
+/* Same hover as the nav: accent ink and a small lift in scale. */
+.icon-btn:hover {
+  color: var(--accent);
+  transform: scale(1.08);
+}
+
+.icon-btn svg { width: 22px; height: 22px; }
+
+.icon-btn--burger {
+  width: 32px;
+  height: 32px;
+  margin-right: 0;
+}
+
+/* An open menu keeps the burger in the accent, as a selected nav item would. */
+.icon-btn[aria-expanded="true"] { color: var(--accent); }
+
+/* Open, the icon sits on a tab of the sheet's own surface: same fill, squared
+   where the two meet, so the menu hangs off the icon rather than floating
+   near it. The hover lift goes, since a scaled tile would break that join. */
+.icon-btn--burger[aria-expanded="true"],
+.icon-btn--burger[aria-expanded="true"]:hover {
+  background: var(--surface);
+  border-radius: 10px 10px 0 0;
+  color: var(--accent);
+  transform: none;
+}
+
+/* ── Main menu (hung under the burger) ─────────────────────────────────── */
+
+.menu-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Opaque dark, the same surface as the account pill, with a hairline on top so
+   a detached panel's edge still reads against the bar. */
+.menu {
+  position: absolute;
+  top: calc(100% + 15px);
+  left: -5px;
+  z-index: 5;
+  min-width: 232px;
+  display: grid;
+  gap: 2px;
+  padding: 7px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+.menu[hidden] { display: none; }
+
+/* Hamburger panel: flush under the icon's tab, left edges aligned, square where
+   they join and rounded away from it — one connected piece, not two. */
+.menu--tab {
+  top: 100%;
+  left: 0;
+  border-radius: 0 12px 12px 12px;
+  /* No top hairline: it would draw a seam straight across the join. */
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 13px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.92;
+  text-align: left;
+  transition: background 0.14s ease, color 0.14s ease, opacity 0.14s ease;
+}
+
+/* A touch stronger than the panel's own wash, so a row still lights up on it. */
+.menu__item:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.menu__divider {
+  height: 1px;
+  margin: 5px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Right-hand menus hang from their trigger's right edge instead of its left. */
+.menu-wrap--end { justify-content: flex-end; }
+
+/* The account menu is the pill's own surface continued: the panel starts at
+   the pill's top edge and carries the same corner curve — the pill is 42px
+   tall, so its 999px radius renders as 21px — then runs straight down to a
+   16px base. Same width, no seam, no gap, and the pill keeps its shape. */
+.menu--end {
+  top: 0;
+  left: 0;
+  right: 0;
+  min-width: 0;
+  /* Room for the pill itself, so the items begin where it ends. */
+  padding: 44px 7px 8px;
+  border-radius: 21px 21px 16px 16px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* The panel draws the same surface, so the pill goes clear and rides above it
+   with nothing reshaped: same capsule, same ink, same position as when closed.
+   The hover lift is dropped because a scaled pill would no longer line up with
+   the surface it sits on. */
+.profile[aria-expanded="true"],
+.profile[aria-expanded="true"]:hover {
+  position: relative;
+  z-index: 6;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.brand {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--accent);
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 0.16s ease, transform 0.18s ease;
+}
+
+/* The wordmark is already the accent, so hover lifts it to the lighter red and
+   grows it a little. The translate keeps it centred as it scales; the underline
+   stays reserved for the Home state. */
+.brand:hover {
+  color: var(--accent-hover);
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  gap: 12px;
+}
+
+/* ── Search (the field grows out of its own button) ──────────── */
+
+/* One control, not a button with a field beside it: the shell is a pill whose only
+   visible part at rest is the search icon's own 40px face, and opening it widens
+   that same pill to the left. The icon stays in the shell's left end, so it travels
+   left as the field opens to its right, and every edge — fill, hairline, outline —
+   belongs to the shell, never to a second box laid over the bar. The field is the
+   rest of the shell, clipped to nothing while it is shut. Its ring is 1.5px in the
+   accent at full strength, the same stroke the account pill lights up with, so the
+   open field wears the bar's own outline rather than a thinner one. */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 40px;
+  height: 40px;
+}
+
+.search__bar {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: flex;
+  align-items: center;
+  width: 40px;
+  height: 40px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px transparent;
+  transition: width 0.3s cubic-bezier(0.33, 0, 0.2, 1), background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+/* The pointer over the shut shell finds the button it is: the fill and hairline are
+   the same two the open field wears, so the pill only ever grows, never changes. */
+.search:hover .search__bar,
+.search.is-open .search__bar {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--hairline-soft);
+}
+
+.search.is-open .search__bar {
+  width: var(--search-w, min(438px, 50vw));
+}
+
+/* The ring is the account pill's hover stroke, the one edge in the bar the
+   search control sits beside: 1.5px, and the accent at full strength. */
+.search.is-open .search__bar {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.search__toggle {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  border-radius: 999px;
+  transition: color 0.16s ease;
+}
+
+.search__toggle svg { width: 22px; height: 22px; }
+.search__toggle:hover { color: var(--accent); }
+.search__toggle[aria-expanded="true"] { color: var(--accent); }
+
+/* Keyboard focus draws the app's own ring — the accent line, offset. */
+.search__toggle:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -7px;
+}
+
+/* Out of the tab order while the shell is shut, and only after the closing width
+   has finished with it, so the field does not vanish ahead of its own shell. */
+.search__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding-right: 5px;
+  visibility: hidden;
+  transition: visibility 0s linear 0.3s;
+}
+
+.search.is-open .search__field {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  caret-color: var(--accent);
+}
+
+.search__input::placeholder { color: var(--text-faint); }
+.search__input:focus { outline: none; }
+
+/* Chrome's own clear glyph would sit beside the field's own ink in a second,
+   lighter weight; Esc clears the text instead. */
+.search__input::-webkit-search-cancel-button { display: none; }
+
+/* The filter pill: the grid's tool pill, one size down, because the field is a
+   single line and nothing here may outgrow it. */
+.search__filter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--glass);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.search__filter svg {
+  width: 14px;
+  height: 14px;
+  /* The three rules read as a stack of sliders at this size. */
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.search__filter:hover { background: #ffffff29; }
+
+/* On, it takes the accent fill, the same as an applied cut on the grid's bar. */
+.search__filter[aria-expanded="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.search__filter:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* What the words in the field find, hung under it: the grid's tray in miniature —
+   black sheet, the same 1.5px accent edge, the same 14px corner, the same shadow
+   lifting it off the page. Width is the field's own, so the list is as wide as the
+   thing that asked for it. */
+.suggest {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: var(--search-w, 380px);
+  max-height: min(60vh, 430px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--app-bg);
+  box-shadow: inset 0 0 0 1.5px var(--accent-line), 0 26px 54px rgba(0, 0, 0, 0.8);
+  animation: suggest-in 0.18s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.suggest[hidden] { display: none; }
+
+@keyframes suggest-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggest { animation: none; }
+}
+
+/* A row is the title, a frame of it, and the year/kind/score that tell two
+   versions of the same name apart. */
+.suggest__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.suggest__row:hover { background: var(--glass); }
+
+.suggest__row:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+}
+
+.suggest__art {
+  flex: none;
+  width: 64px;
+  height: 36px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--surface);
+}
+
+.suggest__words {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.suggest__title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggest__meta {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Nothing found is said in place, rather than by an empty box. */
+.suggest__none {
+  margin: 0;
+  padding: 12px 10px 14px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* Account pill: avatar + name + plan line, then the dropdown chevron. */
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 0;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.18s ease;
+}
+
+/* Same hover as the other frosted controls: wash and white ink stay, a 1.5px
+   accent stroke lights up. */
+.profile:hover {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  transform: scale(1.08);
+}
+
+/* Grey placeholder avatar until a real profile picture is wired up. */
+.avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #3a3a3c;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.avatar svg { width: 25px; height: 25px; stroke-width: 1.6; }
+
+.profile__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.profile__name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.profile__sub {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+}
+
+.chevron-down {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+  flex: none;
+  opacity: 0.75;
+  transition: transform 0.18s ease;
+}
+
+/* Flipped while the account menu is open, so the chevron agrees with it. */
+.profile[aria-expanded="true"] .chevron-down { transform: rotate(180deg); }
+
+/* Window controls: flat, hairline glyphs spaced well apart
+   (minimise / maximise / restore / close) on the far right. */
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 0;
+  padding-left: 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.window-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.78);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.window-btn svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.15;
+}
+
+/* Chrome hovers stay neutral: a grey wash with a white glyph. Only the
+   close button answers in the accent. */
+.window-btn:hover {
+  background: var(--glass);
+  color: #ffffff;
+}
+
+/* One button, two glyphs: maximise by default, restore while maximised. */
+.window-btn--toggle .ico-restore,
+.window-btn--toggle[data-state="restore"] .ico-max { display: none; }
+
+.window-btn--toggle[data-state="restore"] .ico-restore { display: block; }
+
+.window-btn--close:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* ── Hero ────────────────────────────────────────────────── */
+
+/* Two columns: the copy on the left, the slide's artwork on the right, and the
+   slide indicator under the copy. The artwork keeps its 16:9 shape, so it is
+   what decides the billboard's height — just under half the window wide is a
+   little over a quarter of it tall, which is what lets the rows beneath rise
+   into the space a full-bleed billboard used to take. */
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 48%);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: clamp(28px, 3.4vw, 56px);
+  row-gap: 18px;
+  /* The top bar is fixed over the page, so the copy starts below it. Nothing
+     here spills past the artwork any more, so this is ordinary spacing again. */
+  padding: 92px var(--pad-x) 26px;
+  isolation: isolate;
+}
+
+.hero__stage {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  isolation: isolate;
+}
+
+/* No glow behind the card any more: the artwork's own edges are feathered
+   instead, so it dissolves into the page rather than sitting on it as a
+   hard-edged rectangle. The feather is a mask on the image itself, which means
+   it costs no extra element, follows the slide as it swaps, and — being inside
+   the card's own box — cannot be clipped by whatever comes below. Everything
+   outside the mask is simply not painted, so the black page shows through. */
+
+.hero__media {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  /* The slide's own shape, and the reason the billboard is shorter than it used
+     to be: the same 16:9 crop a card gets, at the width of this column. */
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  /* One picture, filling the frame: a w1280 backdrop on a wider window would
+     otherwise tile sideways and leave a band under itself, and the band is
+     the page background showing through where the artwork stopped. */
+  background-image: var(--art);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  /* The edge blur, as a mask of a blurred rounded rectangle — the shape a
+     Gaussian blur leaves, rather than anything drawn. The picture is fully
+     opaque in the middle and thins out over ~80px on every side, reaching
+     nothing right at the frame.
+
+     Why this shape and not a gradient: a linear fade stops at zero somewhere
+     inside the card, and that zero line is a visible inset rectangle. A radial
+     one only really fades the corners, because its ramp is measured from the
+     middle. Blurring a rounded rect instead means the falloff curves around the
+     corners and ends exactly at the border on all four sides, with no seam.
+     And because a mask removes pixels instead of darkening them, every title
+     feathers identically however bright its artwork is. */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1000' height='562'%3E%3Cdefs%3E%3Cfilter id='b' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeGaussianBlur stdDeviation='48'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='100' y='100' width='800' height='362' rx='48' fill='%23fff' filter='url(%23b)'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1000' height='562'%3E%3Cdefs%3E%3Cfilter id='b' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeGaussianBlur stdDeviation='48'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='100' y='100' width='800' height='362' rx='48' fill='%23fff' filter='url(%23b)'/%3E%3C/svg%3E");
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  /* The mask's feather is part of the picture's own box, so it reads as the
+     artwork having shrunk. Growing the box past the grid track restores the size
+     of the solid part without touching the layout: a transform takes no space,
+     so the column, the hero's height and the rows below all stay where they are.
+     The overflow is ~24px on each side, which the hero's top and bottom padding
+     already cover. */
+  transform: scale(1.1);
+  /* Filled per slide from the catalogue, through the stage's --art. It ships
+     empty on purpose: artwork here would be a picture the first real slide
+     replaces a moment later. */
+}
+
+/* Until the catalogue answers, the billboard holds its frame: no artwork, and
+   no title, meta, copy or CTA label — every one of those is data the first
+   payload overwrites. The box keeps its height, so nothing shifts when the
+   slide arrives. A reader without script keeps the frame and the setup note. */
+body.is-hero-pending .hero__content,
+body.is-hero-pending .hero__actions {
+  visibility: hidden;
+}
+
+/* The resume positions wait with everything else. The class comes off in the
+   same task that paints the rows, so no frame shows a bar without its
+   position. */
+body.is-hero-pending .card__progress {
+  display: none;
+}
+
+/* The rows under the top one are still being built: a spinner where they will
+   be, centred across the page, until the last line of the catalogue lands. */
+.loader {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 46px;
+}
+
+.loader__ring {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.16);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loader-spin 0.8s linear infinite;
+}
+
+body:not(.is-rows-pending) .loader {
+  display: none;
+}
+
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The copy sits on the page itself now, not over a picture, so it needs no
+   shade behind it: the artwork is its own box on the right. */
+.hero__content {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: start;
+  /* Fills the row and centres its own rows inside that height, instead of being
+     centred by the row. The difference matters during a slide change: a centred
+     box starts lower on a slide with a taller logo or a longer synopsis, so the
+     incoming copy landed somewhere else while the outgoing ghost was still
+     fading in the old spot. Stretched, the box's top is always the row's top. */
+  align-self: stretch;
+  align-content: center;
+  gap: 16px;
+  max-width: 640px;
+}
+
+/* The outgoing copy is snapshotted above the incoming one and glides out in the
+   direction of travel, so both slides are visible while they move. Only the
+   copy animates: a full-window artwork cross-slide cost the page ~30fps. */
+.hero__ghost {
+  position: absolute;
+  margin: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.hero__title {
+  position: relative;
+  font-size: clamp(44px, 5.4vw, 74px);
+  font-weight: 700;
+  letter-spacing: -0.038em;
+  line-height: 1;
+  /* No text shadow: the painted vignette below is what holds the wordmark off
+     a pale backdrop, and it costs nothing to composite. */
+}
+
+/* A soft vignette behind the wordmark instead of a drop-shadow filter: the
+   filter re-rasters the whole logo whenever the slide changes, while a painted
+   radial gradient is composited for free. Sized from the title box, which hugs
+   the logo, so it follows a wide wordmark and a stacked one alike. */
+.hero__title::before {
+  content: '';
+  position: absolute;
+  inset: -20% -16% -18% -12%;
+  background: radial-gradient(
+    58% 62% at 34% 52%,
+    rgba(0, 0, 0, 0.58) 0%,
+    rgba(0, 0, 0, 0.34) 46%,
+    rgba(0, 0, 0, 0) 78%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero__logo,
+.hero__title-text {
+  position: relative;
+  z-index: 1;
+}
+
+/* The title's own logo art, in place of the text when TMDB has one: capped in
+   both directions so a wide wordmark and a stacked one both sit on the copy's
+   left edge without moving it. */
+.hero__logo {
+  display: block;
+  max-width: min(460px, 42vw);
+  max-height: 130px;
+  object-fit: contain;
+  object-position: left center;
+  transition: opacity 0.2s ease;
+}
+
+.hero__logo[hidden] { display: none; }
+
+/* The expanded card's facts, at billboard size. The chips, the score, the genres
+   and the runtime are the panel's own classes — the same markup the hover card
+   fills — so the two can never drift apart; this only steps the type up and
+   clears the offsets the panel applies to level its last line against its
+   My List pill. */
+.hero__facts {
+  --facts-size: 14px;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  max-width: 560px;
+}
+
+.hero__facts .preview__facts { color: #cfcfcf; }
+
+.hero__facts .preview__genres,
+.hero__facts .preview__runtime {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* The panel ellipsises its genre line to one row because its sheet has a fixed
+   height; the billboard has room, so a long list can wrap instead. */
+.hero__facts .preview__genres {
+  overflow: visible;
+  white-space: normal;
+}
+
+.hero__facts .preview__runtime { top: 0; }
+
+/* The synopsis, under the facts: the one block of prose on the billboard, so it
+   is held to a readable measure rather than the column's full width. Clamped to
+   three lines, because TMDB overviews run long and a longer block would push the
+   actions out of the hero's height. */
+.hero__desc {
+  max-width: 560px;
+  margin: 14px 0 0;
+  font-size: 15.5px;
+  line-height: 1.58;
+  color: rgba(255, 255, 255, 0.82);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 28px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.btn--solid {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.btn--solid:hover {
+  background: var(--accent-hover);
+  transform: scale(1.08);
+}
+
+/* Opaque dark, strokeless: the same surface as the account pill, so the
+   secondary CTA reads as a solid button rather than a wash over the artwork.
+   The extra 1px of padding keeps the button the same size the removed hairline
+   occupied. */
+.btn--ghost {
+  padding: 16px 29px;
+  background: var(--surface-lift);
+  color: var(--text);
+}
+
+/* Hover on the flat controls: the fill and the white ink stay put, and only a
+   1.5px accent stroke lights up. The stroke is an inset shadow so it costs no
+   layout — the buttons keep their exact resting size. */
+.btn--ghost:hover {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  transform: scale(1.08);
+}
+
+.btn--outline {
+  padding: 9px 17px;
+  background: var(--surface-lift);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  gap: 8px;
+}
+
+.btn--outline:hover {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  transform: scale(1.08);
+}
+
+.ico-play {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.ico-plus {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+
+/* Small circular icon button used beside the hero actions. */
+.btn-circle {
+  width: 50px;
+  height: 50px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.btn-circle svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 1.6;
+}
+
+.btn-circle:hover {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  transform: scale(1.08);
+}
+
+.ico-arrow {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* ── Hero side controls ──────────────────────────────────── */
+
+/* Billboard arrows, mirrored on both edges. The left one sits inside the
+   --pad-x gutter so it never crowds the copy. */
+.hero__prev,
+.hero__next {
+  position: absolute;
+  /* Both arrows sit in the page's side gutters, clear of the copy and of the
+     artwork's corners. */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  color: var(--text);
+  opacity: 0.9;
+  transition: opacity 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.hero__prev { left: 12px; }
+.hero__next { right: 12px; }
+
+.hero__prev svg,
+.hero__next svg { width: 30px; height: 30px; stroke-width: 1.5; }
+
+.hero__prev:hover,
+.hero__next:hover {
+  opacity: 1;
+  color: var(--accent);
+  /* The centring translate has to be repeated: a transform here replaces it
+     wholesale, and dropping it made the arrow jump half its height. */
+  transform: translateY(-50%) scale(1.08);
+}
+
+/* The slide indicator, under the copy rather than over the artwork. */
+/* The actions sit on their own row under the copy, not inside it: the copy's
+   height is not fixed — a tall logo or a long synopsis would otherwise drag the
+   buttons down with it on some slides and not others. */
+.hero__bottom {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 26px;
+  padding-top: 4px;
+}
+
+/* The slide pills live under the artwork instead, in the second row of the
+   artwork's own column, so they stay with the image whatever the copy does. */
+.hero__pills {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: center;
+  align-self: center;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+/* Slide indicator: one elongated pill for the current slide, small
+   dots for the rest. */
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 2px;
+}
+
+.dot {
+  position: relative;
+  display: block;
+  width: 7px;
+  height: 7px;
+  flex: none;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: width 0.25s ease, background 0.2s ease, transform 0.18s ease;
+}
+
+/* A dot is only 7px; this widens the pointer target to ~17px without
+   changing what is drawn. */
+.dot::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+
+/* Live billboard sets can be shorter than six, so spares are hidden. */
+.dot[hidden] { display: none; }
+
+/* Hovering a dot grows it and previews the accent. */
+.dot:hover {
+  background: var(--accent);
+  transform: scale(1.5);
+}
+
+.dot--active {
+  width: 30px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.dot--active:hover { transform: scale(1.06); }
+
+/* ── Content row ─────────────────────────────────────────── */
+
+.row {
+  position: relative;
+  /* No z-index: it would make a stacking context, and the row's pager has to
+     be able to draw over the hover panel, which sits in the shell's own. Rows
+     do not overlap each other, so the paint order they had is unchanged. */
+  /* A row's cards to the next row's cards is the grid's own 96px: 28px here,
+     the next row's 54px heading and its 14px top padding. The sheet hangs 84px
+     below its card, so this still leaves 12px of air above the artwork below —
+     it crosses the See all button, which is accepted. */
+  padding: 14px var(--pad-x) 28px;
+  background: var(--app-bg);
+  /* Short views (Movies, TV Shows, Anime) have only two rows, so they grow to
+     share whatever height is left instead of leaving a dead band at the
+     bottom. On Home the content already exceeds the window, so this is inert. */
+  flex: 1 1 auto;
+}
+
+/* ── View filtering ──────────────────────────────────────── */
+/* A row renders only in the views it is tagged for. Home is the full
+   catalogue, Continue Watching and Trending are Home-only, and Anime is
+   never mixed into Movies or TV Shows. */
+.row { display: none; }
+
+body[data-view="home"] .row[data-views~="home"],
+body[data-view="movies"] .row[data-views~="movies"],
+body[data-view="tv"] .row[data-views~="tv"],
+body[data-view="anime"] .row[data-views~="anime"] { display: block; }
+
+/* Nothing below the bar is painted until the artwork has decoded: the hero and
+   every row are laid out — so their pictures are fetched — but they are not
+   visible, and the page is the bar and the spinner. visibility, not display:
+   the geometry has to exist for the row windows to request their cards. */
+body.is-rows-pending {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* A grid opened before the catalogue lands is the one thing on the page: it
+   scrolls, so its own loader is not stranded at the top of a locked window. */
+body.is-rows-pending.is-seeing-all { overflow: auto; }
+
+/* The shelves wait for their rows; See all does not. It keeps the .row class so
+   the card template and the hover panel work unchanged, and hiding it with them
+   left the page black behind its wheel when it was opened while the catalogue
+   was still building. */
+body.is-rows-pending .hero,
+body.is-rows-pending .row:not(.seeall) {
+  visibility: hidden;
+}
+
+/* The spinner takes the window under the bar instead of a slot between rows,
+   so it is centred on what is actually visible while the shelf loads. */
+body.is-rows-pending .loader {
+  position: fixed;
+  inset: 78px 0 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  z-index: 20;
+}
+
+.row__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+/* A row's See all is a square of four cells — the grid the button opens — rather
+   than the words that have to be read before it means anything. */
+.row__head .btn--outline .ico-grid {
+  /* Four cells want as much of the face as the stroke will allow: at 17px the
+     cells were four dots. */
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+}
+
+/* "See all" sits tight against the row's bottom-right, closer to the
+   cards than the heading baseline and further toward the window edge. */
+/* Scoped to the shelves, not the See all page: its Back button lives in a
+   .row__head too, and inheriting the nudge pushed it 59px past the header's own
+   right edge — half of it hanging over the grid. */
+.row:not(.seeall) .row__head .btn--outline {
+  /* Square, not a pill: the four cells are the whole label, so the padding that
+     once framed a word goes, and the pill's 999px radius with it. */
+  flex: none;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  gap: 0;
+  border-radius: 11px;
+  margin-bottom: -9px;
+  /* Darker than the shared --surface-lift: this one sits over card artwork, and
+     the lighter fill read as a grey pill against the black page. */
+  background: #0d0d0d;
+  /* Visual nudge only: the heading keeps its own left alignment. The row's own
+     padding minus 9px, so the button keeps the same 9px margin to the window edge
+     as there is between it and the card row below — at every padding, rather than
+     at the desktop's 68px, which pushed it off a phone's edge. */
+  transform: translateX(calc(var(--pad-x) - 9px));
+}
+
+/* Hover keeps the nudge (transform does not stack across rules) and adds the
+   scale, so the button grows without sliding back to the row's padding edge. */
+.row:not(.seeall) .row__head .btn--outline:hover {
+  transform: translateX(calc(var(--pad-x) - 9px)) scale(1.08);
+}
+
+.row__head .ico-arrow {
+  width: 14px;
+  height: 14px;
+}
+
+.row__title {
+  /* A label for the shelf rather than a headline: much smaller than the old
+     22–30px, and dropped with a transform so the cards below keep their
+     position — the heading moves, the row does not. */
+  font-size: clamp(18px, 1.6vw, 23px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transform: translateY(10px);
+}
+
+/* Track bleeds to the app's right edge so the last card is
+   clipped mid-way (the "there is more" affordance). */
+.row__viewport {
+  position: relative;
+  margin-top: 18px;
+  margin-right: calc(-1 * var(--pad-x));
+}
+
+/* The track is the scroll container: cards sit at their 275px floor and
+   anything past the window edge is reachable with the arrows, a drag or a
+   trackpad swipe. The scrollbar is suppressed because the glass pager is the
+   affordance. The trailing gutter is applied by script only while a row
+   actually overflows, so a row that fits still ends flush with the window. */
+.row__track {
+  display: flex;
+  gap: var(--gap);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+
+  scrollbar-width: none;
+  /* A swipe that reaches a row's end must stop there, or the platform turns
+     the leftover movement into a back-navigation gesture. */
+  overscroll-behavior-x: contain;
+}
+
+.row__track::-webkit-scrollbar { display: none; }
+
+/* No layout or paint hint is toggled while a strip moves. `will-change:
+   transform` promoted the track for the length of a scroll and gave the layer
+   back at rest, and a promoted layer's bounds are snapped to device pixels: the
+   strip painted a fraction of a pixel shorter while it moved and returned to
+   its full height when it stopped. The row's own box never changed — only the
+   layer's — so it read as the shelf breathing as it scrolled. The browser
+   composites a scroller on its own for the length of a gesture anyway. */
+
+/* Drag to pull: the artwork is a handle, not cargo. A browser's answer to
+   press-and-move on an <img> is a native drag of the picture — a ghost that
+   follows the pointer and never scrolls the row. The image opts out at the
+   source (with `draggable=false` on the node and the track's dragstart guard),
+   which leaves the gesture with the track. */
+.row__track img,
+#card-preview img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* No grip cursor: the row is still draggable, but it does not advertise a
+   mode the pointer cannot see. Text selection is off so a pull never smears
+   the artwork's alt text. */
+.row__track,
+body.is-row-dragging { user-select: none; }
+
+/* A pull can start on the panel, which sits over the card it describes: text
+   selection is off there too, so the gesture never becomes a selection drag
+   the browser cancels the pointer stream for. */
+#card-preview { user-select: none; }
+
+/* The panel closed on drag start; it must not take the pointer mid-pull. */
+body.is-row-dragging #card-preview { pointer-events: none; }
+
+/* Windowed rows: only the visible cards are in the DOM, and a spacer at each
+   end stands in for the rest of the strip so the scroll width and the trailing
+   gutter stay identical to a full row. The card width is the row's computed
+   token, which is also what an iced layout would receive. */
+.row__gap {
+  flex: 0 0 auto;
+  width: 0;
+}
+
+.row__gap[hidden] { display: none; }
+
+.row__track.is-virtual .card {
+  flex: 0 0 auto;
+  width: var(--card-w, 275px);
+  min-width: 0;
+}
+
+/* Glass pager: a full-height panel flush to the track's edge, covering the
+   card underneath. No outline — only a translucent fill + blur. Each side
+   stays invisible and untabbable until the track can actually scroll that way,
+   so a row that fits shows no controls. Its footprint is the row's peek slice
+   exactly, with the card's own 14px on the corners facing in, so the pager ends
+   where the card sliver ends and its curve sits on the card's curve instead of
+   cutting a straight edge across it. The slice widths are measured by the row
+   script on every layout (`--peek-lead`/`--peek-tail`), because a slice is only
+   60px when the cards happen to divide the window evenly; 60px here is the
+   fallback before the first layout. */
+.row__prev,
+.row__next {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 60px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.01);
+  -webkit-backdrop-filter: blur(1px) saturate(110%);
+  backdrop-filter: blur(1px) saturate(110%);
+  opacity: 0;
+  pointer-events: none;
+  transition: background 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+
+/* The pager is the row's only one: the hover card is exactly a card wide, so
+   it has no room for arrows of its own and these are what page it. Available
+   only towards a direction the track can actually move. */
+.row__prev.is-available,
+.row__next.is-available {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.row__prev.is-available:hover,
+.row__next.is-available:hover {
+  background-color: var(--glass);
+  color: var(--accent);
+}
+
+/* The open card's panel is drawn above the whole shelf, so a pager that has to
+   sit on top of it needs a higher layer of its own — but only the row being
+   hovered, or the next row's arrows would print across the panel's bottom. */
+.row.is-active .row__prev,
+.row.is-active .row__next {
+  z-index: 41;
+}
+
+.row__prev {
+  left: 0;
+  width: var(--peek-lead, 60px);
+  border-radius: 0 14px 14px 0;
+}
+
+.row__next {
+  right: 0;
+  width: var(--peek-tail, 60px);
+  border-radius: 14px 0 0 14px;
+}
+
+.row__prev svg,
+.row__next svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+/* 275px is the floor, not the fixed size: cards grow to fill whatever width
+   the window gives them, so a row ends flush with the edge instead of leaving
+   a dead gap on wide screens. Below ~1500px the row overflows and the last
+   card is clipped, which is the "there is more" affordance.
+
+   For the iced port this is one computed width per card
+   (`(track - gaps) / count`, floored at 275), not a percentage flex-basis. */
+.card {
+  flex: 1 1 275px;
+  min-width: 275px;
+  cursor: pointer;
+}
+
+
+
+/* Cards sit at the artwork's own ratio (TMDB backdrops are 16:9), so the
+   picture is never cropped and the title drawn into it is always whole. */
+.card__media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface);
+  /* A card that has just reached the window has its half-size picture here
+     while the full file paints on top of it, so nothing blanks on the way in.
+     The position matches the image's own, so the two line up exactly. */
+  background-size: cover;
+  background-position: 50% 100%;
+  background-repeat: no-repeat;
+}
+
+.card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* The ratio matches, so there is normally nothing to crop; the few backdrops
+     that are wider than 16:9 lose the top, never the bottom line of lettering. */
+  object-position: 50% 100%;
+  display: block;
+  /* Long and decelerating rather than short and even: `ease` front-loads the
+     movement, which is what made the zoom read as a snap. This curve starts
+     quick and settles into the last few percent, so the picture glides. */
+  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* The leading slice's one change of picture: the row's real last title when the
+   catalogue finishes (and its stand-in's first picture, which is the same card
+   arriving the same way). Held at zero until its artwork has decoded, so the
+   slice never shows a blank frame, then crossfaded up over a full second on the
+   same curve the rest of the page eases on — the surface around it is at rest,
+   and a 60px picture swapping in reads as a glitch. A full second rather than a
+   quarter: a quarter reads as a switch, and this is the one moment the shelf is
+   supposed to be seen to settle. */
+.card__media img.is-arriving {
+  opacity: 0;
+}
+
+.card__media img.is-arriving.is-ready {
+  opacity: 1;
+  transition: opacity 1000ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card__media img.is-arriving.is-ready {
+    transition: none;
+  }
+}
+
+/* Watch progress, flush with the artwork's bottom edge: the card's
+   own radius and overflow clip it into the corners. */
+.card__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.32);
+  overflow: hidden;
+}
+
+.card__progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* No zoom on hover. The panel opens as the card's own width and top with the
+   same picture, so a card whose art is scaled 1.04 shows a 4% larger, softer
+   copy of the photo the panel is drawing over it — the two do not line up, and
+   the moment the panel slides off to a neighbour the card snaps back to 1:1.
+   That is the shift. The panel is the hover feedback. */
+
+/* The card's place in its row, top-left over the artwork: the number is what
+   keeps a shelf of twenty navigable once the row is scrolled past its first
+   cards. It is a small chip rather than bare lettering so it holds on pale art
+   the way the title does, and it is not part of the picture: the panel draws its
+   own copy over the same corner, because it covers the card it describes. */
+.card__rank,
+.preview__rank {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  /* Above the artwork, on the layer the resume bar uses, so a playing trailer
+     cannot paint over it. */
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 7px;
+  /* A step darker than a chip on the sheet: over artwork it has to read as a
+     mark on the picture, not a second surface. */
+  background: rgba(8, 8, 8, 0.68);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  /* Lined up digits, so 9 and 10 do not shuffle the chip's width by a hair. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* `display: flex` above would otherwise beat the hidden attribute. */
+.preview__rank[hidden] { display: none; }
+
+/* Title over textless artwork: bottom-left, over the picture, with a shadow so
+   it holds on pale art. Never a second line of chrome — it is the card's only
+   title on those cards. */
+.card__caption {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  /* As wide as its words rather than as wide as the card: the title wears the
+     same chip as the rank number in the corner, so it reads as a mark on the
+     picture. The colour is the rank's own; the box is only taller, because a
+     title is bigger type than a number. */
+  width: fit-content;
+  max-width: calc(100% - 20px);
+  padding: 2px 7px 3px;
+  border-radius: 7px;
+  background: rgba(8, 8, 8, 0.68);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--text);
+  /* Two lines at most; anything longer ellipsises rather than spilling. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ── Live TV notice ──────────────────────────────────────── */
+/* Native modal dialog: it sits in the top layer, so the app's clipped
+   overflow does not affect it. */
+.notice {
+  width: min(420px, calc(100vw - 48px));
+  padding: 26px 28px 22px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+.notice::backdrop { background: rgba(6, 6, 6, 0.64); }
+
+.notice__title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.notice__body {
+  margin-top: 10px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.notice__actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The dialog autofocuses its close button, so give it the accent ring rather
+   than the browser's default blue. */
+.notice :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Responsive fallbacks ────────────────────────────────── */
+
+/* ── Hover card ─────────────────────────────────────────────────────── */
+/* The panel grows out of the row, and a row clips its track, so this one is
+   fixed to the window and placed over the card by script: the card's own
+   artwork, then a sheet that opens underneath it. */
+.preview {
+  position: fixed;
+  /* Over the cards, under the app's own chrome. The panel is fixed to the window
+     because rows clip their track, and a fixed box is not inside the row's own
+     stacking context — so the number alone decides whether a card scrolled up to
+     the top of the grid can paint its sheet across the top bar and the filter bar.
+     It sits below both (25 and 30) and above every card, the wheel and the end
+     note, so the bars cover it as it goes under them. */
+  z-index: 24;
+  /* The card's own radius, not a smaller one: the panel covers the card, so
+     any difference shows as the corners tightening when it opens, and the
+     sheet has to keep the same curve as it grows. No shadow: the panel is the
+     card, not a layer floating over it. */
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  /* No surface at panel level: the artwork covers the top of the box and the
+     sheet paints its own, which is a shade above the page rather than the old
+     #131313 block. */
+  background: transparent;
+  /* No fade and no scale-in: the panel is the card's own width and top, with
+     the same artwork, so any transition on the whole box reads as a second
+     card landing on the first. It appears at once, exactly over the card, and
+     only the sheet below the artwork moves. */
+  /* No CSS transition on the travel. The move is stepped in script on whole
+     device pixels (see placePreview): a transition hands the box to the
+     compositor and slides it through fractional offsets, which drops the
+     sheet's text out of subpixel antialiasing for the length of the slide and
+     reads as the duration bobbing up and settling back. */
+  pointer-events: none;
+  /* The panel sits over the card it belongs to, so it has to carry the card's
+     hand: without it the cursor turns back into an arrow the moment it lands. */
+  cursor: pointer;
+}
+
+.preview.is-open { pointer-events: auto; }
+
+/* The stroke for the whole shape — artwork and sheet — as its own layer, drawn
+   exactly the way every other hover ring is drawn: an inset shadow, not a
+   border. A fractional border is snapped to whole device pixels, and along a
+   14px curve that rounds it down to 1px in places and leaves stair-stepped
+   edges, which is what made this ring read thinner and jaggier than the pill
+   buttons. The shadow is rasterised as a soft-edged band instead.
+
+   It has to be this layer, not the panel itself: a shadow on the panel paints
+   under the <img> (so only the sheet got a ring), and a real border would eat
+   1.5px of the artwork's width. */
+.preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Above the artwork layers, which carry z-index 1 while they crossfade:
+     without this the picture paints over the top and side of the stroke and
+     only the sheet's edges keep it. */
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.preview.is-open::after { opacity: 1; }
+
+/* The card under the open panel keeps its artwork. Hiding it was tried — the
+   panel covers the card exactly, so it seemed free — but the panel slides to the
+   next card, and the card it is leaving shows an empty surface block until the
+   panel clears it. The picture underneath must stay. */
+
+.preview__media {
+  /* Positioned, so the panel's pager spans the artwork and not the whole
+     panel: the card's cover is its own frame. */
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-lift);
+}
+
+/* One picture, painted exactly the way the card's own artwork is: same box,
+   same fractional offset, one layer. No fade between pictures — an opacity
+   below 1 hands the <img> to the compositor, and a composited layer is placed
+   on whole device pixels, so the panel's copy of the photo sat up to a pixel
+   off the card's copy for the length of the fade and hopped into line when it
+   ended. That hop is the artwork appearing to shift after a slide. */
+.preview__media img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Anchored like the card's own artwork. Without this the panel cropped from
+     the centre while the card cropped from the bottom, so the same picture came
+     back a little lower — or higher, on the backdrops that are wider than 16:9
+     and lose their top — the instant the panel opened. */
+  object-position: 50% 100%;
+}
+
+/* Continue Watching's resume bar, painted by the panel as well as by the card:
+   the panel covers the card's artwork with the same picture, and without this
+   the bar went with it. It spans the panel's media, so it slides with the
+   panel's artwork — the bar is part of the picture, not something that waits at
+   the destination. The card underneath keeps its own bar, so during a slide
+   both are on screen: the lifted card's bar travelling with it, and the
+   destination's own bar where the panel has not yet covered it. */
+.preview__progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.32);
+  overflow: hidden;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.preview__progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* The trailer lies over the artwork, under the stroke. It takes no pointer
+   events: hover, drag and wheel belong to the card underneath, and a frame that
+   swallows the pointer would trap the panel open. Its chrome is
+   painted inside the frame where no page can reach it, and it cannot be scaled
+   down on its own — but it can be kept off the picture. The frame is made
+   taller than the card, so YouTube letterboxes the 16:9 video inside it and its
+   chrome — the title above, the transport and the mark below — lands in the
+   black bands rather than over the film. This box clips those bands away, so
+   what shows is the whole picture, uncropped, at the card's own width.
+   The percentage is the band budget: 100% is no bands at all, 178% leaves about
+   60px of black above and below a 155px card, which holds the player's chrome.
+   Raise it if a title's chrome still reaches the picture. Pointer events are
+   off, so hovering can never summon the chrome back. The fade waits for the
+   player to report that it is playing; a timer behind it covers browsers that
+   never say so. */
+.preview__trailer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+
+.preview__trailer.is-playing {
+  opacity: 1;
+}
+
+/* Centred by offsets rather than by a translate for the same reason as the
+   runtime: the frame is cropped from a 1.78x-taller embed, and its own
+   transform inside a travelling panel was another thing the compositor could
+   drop mid-slide. Negative top of half the overhang is the identical geometry. */
+.preview__trailer iframe {
+  position: absolute;
+  top: -39%;
+  left: 0;
+  width: 100%;
+  height: 178%;
+  border: 0;
+}
+
+/* The sheet under the artwork: hidden while the panel is shut and revealed
+   downwards as it opens, so it reads as sliding out from under the card's
+   bottom edge rather than as a block appearing over it. See the clip below. */
+.preview__body {
+  display: grid;
+  gap: 5px;
+  /* The bottom padding is what puts the panel's edge past the next row's
+     heading: 46px of row gap plus 36px of heading means the edge has to reach
+     82px below the card, and the cards themselves start at 100px. Sixteen
+     here lands the edge at 86 — the whole heading is covered, and the artwork
+        below still has 14px of air. It also leaves the genre line exactly where
+   it was: the panel grows downwards, not the text upwards. The bottom matches
+   the sides at 14px, so the My List pill sits the same distance from the
+   panel's bottom edge as from its right one. */
+  padding: 8px 14px 14px;
+  /* Very dark, but deliberately not the page's black: the sheet has to read as
+     its own surface under the artwork, and #000 would make the panel look like
+     a picture with loose text below it. This is one step up from the page —
+     black enough to sink into it, light enough to be a surface. */
+  background: #0a0a0a;
+  overflow: hidden;
+  /* Opened by revealing it, not by growing it. `max-height` from 0 to the
+     measured height was the obvious way to write this, and it re-laid out the
+     sheet — and the panel's own box with it — on every one of the twenty frames
+     the 0.34s took, for every card the pointer crossed. The sheet now keeps its
+     full height and is clipped from its top edge, which is the same movement to
+     the eye (the text is clipped, never reflowed, either way) with no layout in
+     the animation at all: only the clip moves. */
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.preview.is-open .preview__body {
+  clip-path: inset(0 0 0 0);
+}
+
+/* The last line of the sheet is the panel's own little row: duration at the
+   left edge, My List at the bottom right. Two columns, not three: an empty
+   middle column would split the free width in half and leave the duration only
+   ~115px, which is less than a series needs — its seasons and episode length
+   would wrap. With the text column taking everything the button does not, a
+   series line sits on one row beside the button. */
+.preview__bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+/* One line, always: the column is exactly as wide as the space left over, and a
+   duration longer than that clips with an ellipsis rather than pushing the
+   button off the panel's edge. */
+.preview__bottom .preview__runtime {
+  grid-column: 1;
+  justify-self: start;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview__bottom .preview__list { grid-column: 2; justify-self: end; }
+
+.preview__facts {
+  display: flex;
+  /* One line, always. The row never wraps and every chip is sized in em off
+     this one value, so the panel can step the whole line down until it fits
+     the width it was given (see placePreview): a system font wider than the
+     one this was designed on used to push the certificate or the score onto a
+     line of its own. */
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0;
+  font-size: var(--facts-size, 12px);
+  color: #b3b3b3;
+  /* A grid item's automatic minimum is its max-content width, and this row is
+     nowrap: without this the row would push past the panel and be clipped
+     instead of reporting the overflow the fit is measured from. */
+  min-width: 0;
+}
+
+.preview__tags {
+  display: flex;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5em;
+}
+
+/* Nothing at the smallest size fits — a font far wider than any system ships,
+   or a panel narrower than a card — so the chips wrap inside their own group
+   instead of running past the panel, where the edge would cut the score off. */
+.preview.is-facts-tight { --facts-size: 10.5px; }
+
+.preview.is-facts-tight .preview__tags {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* Chips keep their own width: a squashed chip would hide the overflow the
+   panel measures for, and print its text outside its own box. */
+.preview__kind,
+.preview__release,
+.preview__cert { flex: 0 0 auto; }
+
+/* Availability: the one tag that says whether the title can be watched yet.
+   A cinema run carries the accent, an unreleased title is an outline, and a
+   plain released title stays as quiet as the metadata around it. */
+.preview__release {
+  padding: 0.2em 0.6em;
+  border-radius: 3px;
+  font-size: 0.84em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #e6e6e6;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.preview__release[data-state="theaters"] {
+  color: #fff;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.preview__release[data-state="unreleased"] {
+  color: #b3b3b3;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+}
+
+.preview__release[hidden] { display: none; }
+
+.preview__kind {
+  padding: 0.2em 0.6em;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 0.84em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Audience score: one accent star and the number, sitting in the facts line
+   after the year, so the row of small type stays one row. */
+.preview__rating {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview__rating[hidden] { display: none; }
+
+.preview__star {
+  width: 0.84em;
+  height: 0.84em;
+  fill: var(--accent);
+}
+
+.preview__cert {
+  padding: 0.2em 0.5em;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  color: #e6e6e6;
+  font-size: 0.84em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.preview__runtime,
+.preview__genres {
+  margin: 0;
+  font-size: 12.5px;
+  color: #dcdcdc;
+}
+
+/* The runtime's type ends higher above the panel's bottom edge than the My List
+   pill does, because a pill's label sits inset inside its own box. Matching the
+   two margins is what makes the line read as level: the digits drop until their
+   last row of pixels is 14px off the edge, the same as the pill's.
+
+   Dropped with `top`, not with a translate: a transform here is a second
+   transform inside the panel, and while the panel travels on its own transform
+   the compositor draws that subtree without it — the duration jumped up 4px for
+   the length of the slide and dropped back when it settled. A relative offset is
+   layout, so the digits move with the panel and nothing else. */
+.preview__runtime { position: relative; top: 4px; }
+
+/* Categories: the second line of the sheet, directly under the facts, and a
+   step down in size so it reads as a caption to them rather than another fact.
+   The runtime and My List own the line beneath it. */
+.preview__genres {
+  font-size: 10.5px;
+  color: #8f8f8f;
+  margin-top: 1px;
+  /* One line, ellipsised: a wrapped genre line would make the sheet taller
+     than the band under the card and put it back over the row below. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The same pill as See all: a dark surface that lights up with the accent
+   stroke on hover instead of turning white. */
+.preview__list {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+  padding: 5px 11px 5px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-lift);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.preview__list:hover {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  transform: scale(1.06);
+}
+
+.preview__list.is-added {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+}
+
+.preview__ico {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  transition: transform 0.2s ease;
+}
+
+.preview__list.is-added .preview__ico {
+  transform: rotate(45deg);
+}
+
+/* ── See all ────────────────────────────────────────────────── */
+/* One row's list as a grid. The section keeps the .row class so the hover panel
+   and the card template work unchanged; the billboard and the shelves step
+   aside while it is open, and the footer stays where it is. */
+.seeall {
+  display: none;
+  /* The bar floats over the page, and the billboard that normally sits under it
+     is gone here, so this section clears the bar itself — and clears it by exactly
+     the app bar's height, which is the height the bar sticks at. So the bar starts
+     where it will stay: scrolling the grid no longer lifts Back, the title and the
+     pills up by the gap that used to be above them. */
+  padding-top: var(--topbar-h, 96px);
+}
+
+body.is-seeing-all .seeall { display: block; }
+
+body.is-seeing-all .hero,
+body.is-seeing-all .loader,
+body.is-seeing-all .row:not(.seeall) { display: none; }
+
+.seeall__grid {
+  display: grid;
+  /* Columns of at least 220px: five across at 1280, six at 1600, and fewer as
+     the window narrows, without a breakpoint for any of them. */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  /* Columns stay tight; the rows part company. The row gap is measured from the
+     shelf rows on the Home page — card to card, 89px — so the grid breathes at
+     the same rhythm as the rows it replaces. A hovered card's sheet hangs 85px
+     below it, so this also leaves it clear of the row underneath. */
+  column-gap: var(--gap);
+  row-gap: 89px;
+  margin-top: 16px;
+}
+
+/* A card in a grid column is sized by the column, not by the row's 275px floor
+   and its stretch to fill a track. */
+.seeall__grid .card { flex: none; width: auto; min-width: 0; }
+
+/* The wheel over the grid while its covers are on their way. Fixed to the
+   window, so it is centred where the reader is looking however far the grid
+   runs, and it takes no room of its own: the grid below keeps its boxes and its
+   place while it waits. */
+.seeall__wait {
+  display: none;
+  position: fixed;
+  inset: 0;
+  place-items: center;
+  pointer-events: none;
+}
+
+.seeall.is-waiting .seeall__wait { display: grid; }
+
+/* Nothing half-dressed behind the wheel: the first chunk appears already wearing
+   its titles. visibility rather than display, because a hidden grid still
+   measures — the art and details passes dress the very cards the wheel covers. */
+body.is-seeing-all .seeall.is-veiled .seeall__grid,
+body.is-seeing-all .seeall.is-veiled .seeall__more {
+  visibility: hidden;
+}
+
+/* The slot under the last row: the wheel while a batch is on its way, the end of
+   the list once nothing is left. It stands where Load more used to, so the room
+   under the last row is unchanged. */
+.seeall__more {
+  display: flex;
+  justify-content: center;
+  position: relative;
+  /* The same room under the last row: its sheets open into this, not over the
+     slot below them. */
+  margin-top: 96px;
+}
+
+.seeall__more[hidden] { display: none; }
+
+/* Room for the wheel only while it is up; the end note brings its own. */
+.seeall__more.is-waiting { min-height: 36px; }
+
+.seeall__more.is-waiting .seeall__end { visibility: hidden; }
+
+.seeall__more-wait {
+  display: none;
+  position: absolute;
+  inset: 0;
+  place-items: center;
+  pointer-events: none;
+  /* Above the cards around it (their artwork and rank sit at 1–3) and below the
+     hover panel and the bar, so it is never painted under a card. */
+  z-index: 4;
+}
+
+.seeall__more.is-waiting .seeall__more-wait { display: grid; }
+
+/* Nothing matched: the bar keeps its place and the page says so where the first
+   card would have been. */
+.seeall__empty {
+  margin: 0;
+  padding: 88px var(--pad-x) 150px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.seeall__empty[hidden] { display: none; }
+
+/* Nothing left to fetch: said plainly, in the place the wheel was. */
+.seeall__end {
+  margin: 0;
+  padding: 12px 0;
+  text-align: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.seeall__end[hidden] { display: none; }
+
+/* A card with no picture yet shows its own dark frame, never a broken-image
+   glyph and the title's alt text sitting over the rank. The picture appears the
+   moment the schedule names one. */
+#see-all-grid .card img:not([src]) { visibility: hidden; }
+
+/* ── See all: the bar and its filters ───────────────────────── */
+/* The bar holds the way out and the cuts being made, and it stays at the top of
+   the window: Back is always one click away, however far down the grid the
+   reader is, and a filtered grid says what it is showing. It sits under the app
+   bar rather than over it, at the height that bar is measured at. */
+.seeall__bar {
+  position: sticky;
+  top: var(--topbar-h, 0px);
+  z-index: 25;
+  /* Full bleed: the app background has to cover the cards scrolling under it. */
+  margin: 0 calc(-1 * var(--pad-x));
+  padding: 10px var(--pad-x) 12px;
+  background: var(--app-bg);
+  box-shadow: inset 0 -1px 0 var(--hairline-soft);
+}
+
+/* While a tray is open the bar draws no line of its own. The line is a rule of its
+   own instead, run from the left edge to the tray's left edge and stopping there:
+   it cannot show over the tray at any zoom or pixel ratio, because it is never
+   drawn under it. Both ends sit at the tray's top, so the line and the box meet
+   corner to corner in the same accent. */
+.seeall__bar:has(.filter-panel:not([hidden])) {
+  box-shadow: none;
+}
+
+.seeall__bar:has(.filter-panel:not([hidden]))::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: calc(var(--pad-x) + min(620px, 100% - 2 * var(--pad-x)));
+  bottom: 0;
+  height: 1.5px;
+  background: var(--accent-line);
+  pointer-events: none;
+}
+
+/* And the piece on the other side of the box: the page margin it leaves, drawn in
+   the same accent and at the same height, so the line carries on past the tray
+   instead of stopping dead at it. */
+.seeall__bar:has(.filter-panel:not([hidden]))::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: var(--pad-x);
+  bottom: 0;
+  height: 1.5px;
+  background: var(--accent-line);
+  pointer-events: none;
+}
+
+.seeall__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 38px;
+}
+
+/* A shelf's title is dropped 10px so the cards under it keep their place; the bar
+   has no cards under it, so that drop is undone and the flex row's own centring
+   puts the name level with Back. */
+.seeall__head .row__title {
+  margin: 0;
+  flex: none;
+  transform: none;
+}
+
+/* Back is the arrow alone, in a circle: the grid's way out, not a labelled pill.
+   A square box with a 50% radius, so the circle stays a circle at any zoom, and
+   the arrow sits centred in it. It keeps its size under the pointer. */
+.seeall__back {
+  flex: none;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  gap: 0;
+  border-radius: 50%;
+}
+.seeall__back:hover { transform: none; }
+
+.seeall__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+}
+
+.seeall__tools[hidden] { display: none; }
+
+/* One pill per cut. A pill with a cut on it takes the accent wash and says how
+   many choices it holds, so the bar reads at a glance without opening anything. */
+.tool {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  background: var(--glass);
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.tool:hover { box-shadow: inset 0 0 0 1.5px var(--accent-line); }
+
+.tool.is-on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+}
+
+/* The pill whose tray is open answers in the accent hairline alone: a filled pill
+   means a cut is on, and opening a tray is not a cut. */
+.tool[data-tool][aria-expanded="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+}
+
+.tool--reset {
+  background: none;
+  color: var(--text-dim);
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.tool--reset:hover { color: var(--text); }
+
+/* Reset holds its place whether or not there is a cut to undo: a pill that comes
+   and goes moves every other pill in the bar, which is a bar that shifts under
+   the pointer. With nothing to undo it is quiet, not gone. */
+.tool--reset:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.tool--reset:disabled:hover {
+  color: var(--text-faint);
+  box-shadow: none;
+}
+
+/* The film or series switch, for the one section that carries both. */
+.tool-split {
+  display: inline-flex;
+  background: var(--glass);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.tool-split[hidden] { display: none; }
+
+.tool-split__btn {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.tool-split__btn.is-on {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+}
+
+/* One panel for whichever pill is open, hung under the bar on the right. It is
+   inside the sticky bar, so it opens above the cards and below the app bar. */
+/* The cuts open as a tray rather than a card floating over the cards: the bar's
+   own black, its own side padding, no gap to fall through and square corners at
+   the top, so it reads as the bar unfolding. The lists are long, so they run
+   across in columns instead of down a narrow card. */
+.filter-panel {
+  position: absolute;
+  /* Level with the bar's edge line, and far enough up to sit on top of it: the
+     tray meets the separation line at its own top edge and covers it where it
+     passes, so no line is drawn across the top of the box. */
+  top: calc(100% - 1.5px);
+  right: var(--pad-x);
+  width: min(620px, calc(100% - 2 * var(--pad-x)));
+  max-height: min(56vh, 430px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 14px 14px;
+  border-radius: 0 0 14px 14px;
+  background: var(--app-bg);
+  /* The tray's own bottom edge, and the shadow that lifts it off the cards: on a
+     black page a black sheet needs an edge, or the list looks like it has no end. */
+  box-shadow: inset 1.5px 0 0 var(--accent-line), inset -1.5px 0 0 var(--accent-line),
+    inset 0 -1.5px 0 var(--accent-line), 0 26px 54px rgba(0, 0, 0, 0.8);
+}
+
+/* The years are long enough to scroll; the bar it scrolls in should be the tray's
+   own quiet edge rather than a system widget parked inside it, steppers and all.
+   The standard properties would switch Chromium back to a native bar and throw
+   these rules away, so they are for the browsers that have no ::-webkit- ones. */
+@supports not selector(::-webkit-scrollbar) {
+  .filter-panel {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+}
+
+.filter-panel::-webkit-scrollbar { width: 8px; }
+.filter-panel::-webkit-scrollbar-button { display: none; height: 0; }
+.filter-panel::-webkit-scrollbar-track { background: none; }
+.filter-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.filter-panel::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+.filter-panel[hidden] { display: none; }
+
+/* The tray is drawn down out of the separation line: it starts with no height at
+   the line and grows to its own, its own edge travelling with it, so it reads as a
+   sheet sliding down out of the bar rather than a panel appearing below it. The
+   scrolling is off until the last frame, or a scrollbar would flash inside the box
+   while it is still opening. */
+@keyframes filter-tray-in {
+  0% {
+    max-height: 0;
+    overflow-y: hidden;
+  }
+  99% {
+    overflow-y: hidden;
+  }
+  100% {
+    max-height: var(--tray-h, min(56vh, 430px));
+    overflow-y: auto;
+  }
+}
+
+.filter-panel {
+  /* A steady draw rather than a flick: the standard ease-in-out spends the whole
+     0.26s moving instead of arriving in the first frames. */
+  animation: filter-tray-in 0.26s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-panel { animation: none; }
+}
+
+/* One-of-these choices, for the order the page reads in: the bar's own pill, so
+   the tray and the bar are the same language. */
+.filter__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.filter__choice {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--glass);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.filter__choice:hover { background: #ffffff29; }
+
+.filter__choice.is-on {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  background: rgba(217, 47, 42, 0.14);
+}
+
+.filter__title {
+  margin: 12px 2px 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.filter__hint {
+  margin: 0 2px 10px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* The minimum score is a slider, not a list: anywhere on a 0-10 scale, with the
+   value it stands on printed above it. The track stays quiet so the one accent
+   in the panel is the thumb the reader is holding. */
+.filter__score {
+  max-width: 460px;
+  padding: 6px 2px 10px;
+}
+
+.filter__score-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.filter__score-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter__score-scale {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.filter__range {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.filter__range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.filter__range::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.filter__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(217, 47, 42, 0.22);
+}
+
+.filter__range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(217, 47, 42, 0.22);
+}
+
+.filter__range:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 4px; }
+
+/* A column for each ~186px the tray has: genres land in three, the years in
+   three of many, and a narrow window falls back to one without a rule to keep. */
+.filter__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
+  gap: 1px 6px;
+  margin: 0 -6px;
+}
+
+.filter__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.filter__option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+/* The real input is kept for the keyboard and for the change event; the mark is
+   what the row draws, in the same red as every other chosen thing. */
+.filter__option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.filter__mark {
+  position: relative;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--hairline);
+}
+
+.filter__option input[type="radio"] + .filter__mark { border-radius: 50%; }
+
+.filter__option input:checked + .filter__mark {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.filter__option input:checked + .filter__mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 1.5px;
+  background: #ffffff;
+}
+
+.filter__option input[type="radio"]:checked + .filter__mark::after {
+  inset: 5px;
+  border-radius: 50%;
+}
+
+.filter__option input:checked ~ .filter__label { color: var(--text); }
+
+.filter__option input:focus-visible + .filter__mark {
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+}
+
+.filter__clear {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 2px 2px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--hairline-soft);
+  cursor: pointer;
+}
+
+.filter__clear:hover { color: var(--accent); }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+/* The end of the page. Its height is the point: the hover sheet opens to 241px
+   from a card's top, and the last row's cards sit close enough to the document's
+   end that the sheet had nothing left to open into. This is the space it gets. */
+.footer {
+  padding: 44px var(--pad-x) 64px;
+  border-top: 1px solid var(--hairline-soft);
+  background: var(--app-bg);
+}
+
+.footer__brand {
+  margin: 0 0 5px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+}
+
+.footer__note {
+  max-width: 620px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row__track { scroll-behavior: auto; }
+}
+
+@media (max-width: 1180px) {
+  :root { --pad-x: 44px; }
+}
+
+/* Below the narrow breakpoints: the destinations sit in the burger's menu once the
+   bar drops them, and the account menu's symbols wait for the pill that needs them.
+   Declared here, ahead of the breakpoints that switch them on. */
+.menu__nav,
+.menu__ico { display: none; }
+
+@media (max-width: 900px) {
+  :root { --pad-x: 28px; }
+
+  .topbar { padding: 11px 12px 18px 14px; gap: 12px; }
+  .topbar__nav .nav-link { display: none; }
+  .topbar__actions { gap: 12px; }
+  .window-controls { padding-left: 4px; margin-left: 0; gap: 3px; }
+  .window-btn { width: 28px; height: 28px; }
+  .window-btn svg { width: 15px; height: 15px; }
+  /* The links have gone at this width, so the wordmark takes their place beside
+     the burger instead of hanging over the middle with nothing to centre against.
+     Relative, not static: the underline it draws on the home view hangs off it. */
+  .brand {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    margin-right: auto;
+    font-size: 22px;
+  }
+
+  .brand:hover { transform: scale(1.08); }
+
+  /* …and the destinations they carried move into the burger's menu, or between
+     this width and a phone's they would be nowhere at all. */
+  .menu__nav { display: block; }
+
+  .hero { min-height: 480px; }
+  .hero__prev,
+  .hero__next { display: none; }
+  .hero__bottom { bottom: 20px; right: 22px; gap: 16px; }
+  .dot--active { width: 34px; }
+}
+
+@media (max-width: 700px) {
+  /* Room is the whole problem here: the bar keeps the burger, the wordmark, search
+     and the account, and gives up everything that is not those four. */
+  .topbar {
+    gap: 6px;
+    padding: 8px 8px 14px 10px;
+  }
+
+  .topbar__nav { gap: 0; }
+  .topbar__nav .nav-link { display: none; }
+
+  /* The window chrome stays: a window is a window at any width, and the three
+     buttons are how it is closed. Everything around them gives a little instead —
+     a tighter bar, a wordmark a step smaller, tighter buttons. */
+  .window-controls {
+    /* 2 from the actions' own gap plus 10 here: the same 12 the pill keeps from
+       the separator at a full-width bar, and 4 from it to the first button. */
+    padding-left: 4px;
+    margin-left: 10px;
+    gap: 0;
+  }
+
+  .window-btn {
+    width: 26px;
+    height: 26px;
+  }
+
+  .window-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .topbar__actions { gap: 2px; }
+
+  /* The account pill drops to the picture and the chevron. */
+  .profile {
+    gap: 2px;
+    padding: 3px 5px 3px 3px;
+  }
+
+  .profile__meta { display: none; }
+
+  /* Its menu drops under that pill as two symbols on one line, rather than a
+     panel of words hung off a pill that no longer has any. */
+  .menu--end {
+    top: calc(100% + 8px);
+    left: auto;
+    right: 0;
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 14px;
+  }
+
+  .menu--end .menu__item {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  .menu--end .menu__label { display: none; }
+
+  .menu--end .menu__ico {
+    display: block;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* An open field is the bar: what it would overlap steps aside for it. */
+  .topbar:has(.search.is-open) .brand,
+  .topbar:has(.search.is-open) .profile,
+  .topbar:has(.search.is-open) .icon-btn[aria-label="Notifications"] {
+    display: none;
+  }
+
+  .search.is-open .search__field { gap: 8px; }
+}
+
+/* Below this the bell is the first thing to go: the field and the account are
+   the two the bar cannot do without. */
+@media (max-width: 430px) {
+  .icon-btn[aria-label="Notifications"] { display: none; }
+
+  .brand { font-size: 19px; }
+
+  .window-btn {
+    width: 24px;
+    height: 24px;
+  }
+
+  .window-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+/* ── No key ─────────────────────────────────────────────────────────────────
+   A static build fetches TMDB from the page, so without a key there is no
+   catalogue behind it. This is what stands where the wheel
+   would otherwise turn forever. */
+.notice {
+  display: none;
+  max-width: 420px;
+  margin: 96px auto 120px;
+  padding: 28px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: #0d0d0d;
+  text-align: center;
+}
+
+body.is-unconfigured .notice {
+  display: block;
+}
+
+body.is-unconfigured .loader {
+  display: none;
+}
+
+.notice__title {
+  margin: 0 0 10px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.notice__body {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.notice__body code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
