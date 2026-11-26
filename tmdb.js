@@ -396,9 +396,13 @@
     return found.filter(Boolean);
   };
 
-  // The whole catalogue, in the two stages the page paints: the first screen
-  // (billboard and Continue Watching), then the shelves under it.
-  const catalogue = async (stage) => {
+  // The catalogue, in the order the page can use it: the billboard and Continue
+  // Watching, then the leading `gate` titles of the gate shelves — what the
+  // loader waits on — and finally the rest of each shelf, grown after the page
+  // is up in the batch order the reader walks them. The three `lateRows` shelves
+  // are left empty for that second half. A shelf fetched whole before the first
+  // paint is a loader that waits on titles nobody is looking at yet.
+  const catalogue = async (stage, { gate = 10, lateRows = [] } = {}) => {
     const watching = await continueWatching();
     const [movies, shows, anime] = await Promise.all([
       fetchList('popular-movies', 1),
@@ -472,37 +476,29 @@
       partial: true,
     });
 
-    // The rest: each row grown to ROW_COUNT from its own list, skipping what
-    // the rows above already own, and handing anything not out yet to Upcoming.
+    // The rest: the leading `gate` titles of each gate row, skipped past what
+    // the rows above already own, with anything not out yet handed to Upcoming.
+    // The held-back rows stay empty here; the rest of each row is grown after
+    // the first paint, twenty at a time, in the order the shelves are read.
     const sections = {};
     const claims = new Set(watching.map(keyOf));
     claimsByRow['continue-watching'] = new Set(claims);
     const pending = [];
     const theatres = [];
     const pages = {};
+    // One feed a row: the page it stopped on, the titles of that page not taken
+    // yet, and every title it has already been offered. A row grown ten at a
+    // time has to pick up the rest of a half-read page instead of skipping it.
+    const feeds = {};
 
     const grow = async (name, target) => {
-      const items = [];
-      const seen = new Set();
-      let page = 1;
-      // A page can add nothing and still not be the end: the rows divide the
-      // catalogue between them. Five dry pages in a row is the list running out.
-      let dry = 0;
-      while (items.length < target && page <= 25 && dry < 5) {
-        let list;
-        try {
-          list = pages[name]?.[page] || await fetchList(name, page);
-        } catch (error) {
-          break;
-        }
-        pages[name] = pages[name] || {};
-        pages[name][page] = list;
-        const before = items.length;
-        for (const item of list) {
-          if (items.length >= target) break;
+      const items = (sections[name] || []).slice();
+      const feed = feeds[name] || (feeds[name] = { page: 1, queue: [], seen: new Set() });
+      const take = () => {
+        while (feed.queue.length && items.length < target) {
+          const item = feed.queue.shift();
           const key = keyOf(item);
-          if (claims.has(key) || seen.has(key)) continue;
-          seen.add(key);
+          if (claims.has(key)) continue;
           if (comingSoon(item)) {
             pending.push(item);
             continue;
@@ -515,32 +511,63 @@
           items.push(item);
           claims.add(key);
         }
-        claimsByRow[name] = new Set(seen);
+      };
+      // A page can add nothing and still not be the end: the rows divide the
+      // catalogue between them. Five dry pages in a row is the list running out.
+      let dry = 0;
+      while (items.length < target && feed.page <= 25 && dry < 5) {
+        take();
+        if (items.length >= target) break;
+        const page = feed.page;
+        feed.page += 1;
+        let list;
+        try {
+          list = pages[name]?.[page] || await fetchList(name, page);
+        } catch (error) {
+          break;
+        }
+        pages[name] = pages[name] || {};
+        pages[name][page] = list;
+        for (const item of list) {
+          const key = keyOf(item);
+          if (feed.seen.has(key)) continue;
+          feed.seen.add(key);
+          feed.queue.push(item);
+        }
+        const before = items.length;
+        take();
         dry = items.length === before ? dry + 1 : 0;
-        page += 1;
         if (!list.length) break;
       }
       sections[name] = items;
+      // What this shelf owns, which is what See all walks past in the shelves
+      // around it.
+      claimsByRow[name] = new Set(items.map(keyOf));
     };
 
     for (const name of ['trending', 'popular-movies', 'popular-tv', 'top-movies', 'top-tv', 'popular-anime', 'top-anime']) {
-      await grow(name, ROW_COUNT);
+      // The visible shelves held back for after the reveal start empty: their
+      // leading ten is fetched by the first growth round instead. Everything
+      // else is seeded now, so the loader has four shelves' gates to wait on.
+      const seeds = lateRows.includes(name) ? 0 : gate;
+      await grow(name, seeds);
       // Handed over now, not with the whole catalogue at the end: the page
       // paints this shelf and starts its one-request-per-title lookups while the
       // next row is still being read. Holding them until the last fetch is what
       // turned every card's details into a second, serial pass after the
       // catalogue and pushed the first paint out to seven seconds.
-      stage({ sections: { [name]: sections[name] }, partial: true });
+      if (sections[name].length) stage({ sections: { [name]: sections[name] }, partial: true });
       d(`row ${name} ${sections[name].length}`);
     }
 
     // Upcoming: what the rows gave back for not being out yet, topped up from
-    // TMDB's own coming-soon list.
+    // TMDB's own coming-soon list. It is one of the held-back shelves, so it
+    // starts empty and gets its leading ten after the reveal.
     const coming = [];
     const comingKeys = new Set();
-    const takeComing = (items) => {
+    const takeComing = (items, limit = ROW_COUNT) => {
       items.forEach((item) => {
-        if (coming.length >= ROW_COUNT) return;
+        if (coming.length >= limit) return;
         const key = keyOf(item);
         if (claims.has(key) || comingKeys.has(key) || !goesToUpcoming(item)) return;
         comingKeys.add(key);
@@ -553,19 +580,55 @@
         coming.push(item);
       });
     };
-    takeComing(pending);
-    takeComing(theatres);
-    for (let page = 1; coming.length < ROW_COUNT && page <= 10; page += 1) {
-      const payload = await get('/movie/upcoming', { page });
-      const items = (payload.results || []).map((raw) => normalise(raw, 'movie')).filter(Boolean);
-      takeComing(items);
-      if (!items.length) break;
-    }
+    const upcomingSeeds = lateRows.includes(UPCOMING) ? 0 : gate;
+    takeComing(pending, upcomingSeeds);
+    takeComing(theatres, upcomingSeeds);
+    let upcomingPage = 1;
+    const topUpComing = async (target) => {
+      while (coming.length < target && upcomingPage <= 10) {
+        const page = upcomingPage;
+        upcomingPage += 1;
+        const payload = await get('/movie/upcoming', { page });
+        const items = (payload.results || []).map((raw) => normalise(raw, 'movie')).filter(Boolean);
+        takeComing(items, target);
+        if (!items.length) break;
+      }
+    };
+    await topUpComing(upcomingSeeds);
     sections[UPCOMING] = coming;
 
     // The rest of the billboards have been arriving while the rows were read.
     await heroRest.catch(() => hero);
     stage({ sections: { [UPCOMING]: coming }, hero, partial: false });
+
+    // After the first paint. One row's next batch, then the next row's, round
+    // again until every shelf is as long as it gets — the order the page dresses
+    // them in. Each batch is returned, not staged: the page asks for its details
+    // first and only then appends it, so a card from a batch is never painted
+    // with the list page's still and swapped in the open.
+    const growUpcoming = async (count) => {
+      const before = coming.length;
+      if (before >= ROW_COUNT) return [];
+      const target = Math.min(ROW_COUNT, before + count);
+      takeComing(pending, target);
+      takeComing(theatres, target);
+      await topUpComing(target);
+      const chunk = coming.slice(before);
+      sections[UPCOMING] = coming;
+      return chunk;
+    };
+
+    return {
+      async growRow(name, count) {
+        if (name === UPCOMING) return growUpcoming(count);
+        // An empty row is a held-back shelf on its first turn, not a failure:
+        // the catalogue left it at zero for the ordered pass to seed.
+        const before = (sections[name] || []).length;
+        if (before >= ROW_COUNT) return [];
+        await grow(name, Math.min(ROW_COUNT, before + count));
+        return sections[name].slice(before);
+      },
+    };
   };
 
   // ── Details, for the cards the screen reaches ────────────────────────────
