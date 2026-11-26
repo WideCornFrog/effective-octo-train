@@ -73,12 +73,56 @@
   const waiting = new Map();
   let inFlight = 0;
   const queue = [];
-  // Browsers open a handful of connections per host anyway; the queue is here
-  // so a grid asking for forty details does not open forty at once.
-  const LIMIT = 8;
+  // TMDB runs two different limits, and they are not the same one:
+  //   api.themoviedb.org — about 40 requests a second per IP, and 20
+  //     connections per IP. Both are per address, not per key: a key buys no
+  //     extra budget.
+  //   image.tmdb.org — no request rate at all, only 20 simultaneous
+  //     connections. That cap lives in the page's art pump, not here.
+  // So the API side holds both of its numbers: twenty connections open, and no
+  // more than forty starts in any second. The second one is a token bucket
+  // rather than a pause between starts, so a quick burst is still quick — it
+  // just cannot run past the ceiling and get 429s for it.
+  const LIMIT = 20;         // connections in flight
+  // The token in the config is sent as an Authorization header, and a header is
+  // not a simple request: every call is paired with a CORS preflight, and the
+  // CDN counts both. With the token, forty places in the second's budget is
+  // eighty requests at the CDN — over the line, which is what the occasional
+  // 429 was. So the budget is halved when the token is what authenticates,
+  // and a key in the query string (a simple request, no preflight) gets the
+  // full forty.
+  const PREFLIGHT = Boolean(TOKEN) && !KEY;
+  const PER_SECOND = PREFLIGHT ? 20 : 40;   // request starts in any one second
+
+  // The starts of the last second, oldest first. A token bucket let the map be
+  // read two ways: forty places a second on average, but a bucketful at the top
+  // of one clock second plus the refill inside it is sixty starts at TMDB's
+  // counter — measured at 56 — which is past the ceiling however the average
+  // reads. The window below holds for every one-second stretch instead.
+  const starts = [];
+  let throttleTimer = 0;
+
+  // Take a place in the last second's budget, or say how long until one frees.
+  const takeToken = () => {
+    const now = performance.now();
+    while (starts.length && now - starts[0] >= 1000) starts.shift();
+    if (starts.length >= PER_SECOND) return Math.max(1, Math.ceil(1000 - (now - starts[0])));
+    starts.push(now);
+    return 0;
+  };
 
   const pump = () => {
     while (inFlight < LIMIT && queue.length) {
+      const wait = takeToken();
+      if (wait) {
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(() => {
+            throttleTimer = 0;
+            pump();
+          }, Math.max(10, wait));
+        }
+        return;
+      }
       const job = queue.shift();
       inFlight += 1;
       job().finally(() => {
@@ -94,8 +138,10 @@
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const response = await fetch(url, { headers, cache: 'no-store' });
           // TMDB counts by the second: a 429 needs a pause, not a new plan.
+          // When it names the pause, that is the one to take.
           if (response.status === 429 && attempt < 2) {
-            await new Promise((go) => setTimeout(go, 400 + attempt * 600));
+            const asked = Number(response.headers.get('retry-after') || 0) * 1000;
+            await new Promise((go) => setTimeout(go, asked || 700 + attempt * 900));
             continue;
           }
           if (!response.ok) throw new Error(`TMDB ${response.status}`);
@@ -119,7 +165,10 @@
     const url = `${BASE}${path}?${query.toString()}`;
     if (cache.has(url)) return Promise.resolve(cache.get(url));
     if (waiting.has(url)) return waiting.get(url);
-    const headers = TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
+    // A key in the query is a simple request; the token rides a header and
+    // costs a preflight on every URL. If both are set, the key is the cheaper
+    // way to ask.
+    const headers = TOKEN && !KEY ? { Authorization: `Bearer ${TOKEN}` } : {};
     const job = request(url, headers)
       .then((body) => {
         cache.set(url, body);
@@ -399,12 +448,22 @@
 
     const home = interleave(movies, shows);
     const animeList = anime.slice(0, HERO_COUNT);
-    const hero = {
-      home: await heroFrom(home, 'movie'),
-      movies: await heroFrom(movies, 'movie'),
-      tv: await heroFrom(shows, 'tv'),
-      anime: await heroFrom(animeList, 'tv'),
-    };
+    // Only the home billboard is read before the first line goes out. The other
+    // three destinations' billboards are not on the reader's first screen, so
+    // they are looked up alongside the shelves below instead of in front of it.
+    const hero = { home: await heroFrom(home, 'movie') };
+    // Those three run beside the row walk — same requests as before, but
+    // overlapping the shelves instead of queueing behind them.
+    const heroRest = Promise.all([
+      heroFrom(movies, 'movie'),
+      heroFrom(shows, 'tv'),
+      heroFrom(animeList, 'tv'),
+    ]).then(([moviesHero, tvHero, animeHero]) => {
+      hero.movies = moviesHero;
+      hero.tv = tvHero;
+      hero.anime = animeHero;
+      return hero;
+    });
     d('hero ready');
 
     stage({
@@ -466,6 +525,12 @@
 
     for (const name of ['trending', 'popular-movies', 'popular-tv', 'top-movies', 'top-tv', 'popular-anime', 'top-anime']) {
       await grow(name, ROW_COUNT);
+      // Handed over now, not with the whole catalogue at the end: the page
+      // paints this shelf and starts its one-request-per-title lookups while the
+      // next row is still being read. Holding them until the last fetch is what
+      // turned every card's details into a second, serial pass after the
+      // catalogue and pushed the first paint out to seven seconds.
+      stage({ sections: { [name]: sections[name] }, partial: true });
       d(`row ${name} ${sections[name].length}`);
     }
 
@@ -498,7 +563,9 @@
     }
     sections[UPCOMING] = coming;
 
-    stage({ sections, hero, partial: false });
+    // The rest of the billboards have been arriving while the rows were read.
+    await heroRest.catch(() => hero);
+    stage({ sections: { [UPCOMING]: coming }, hero, partial: false });
   };
 
   // ── Details, for the cards the screen reaches ────────────────────────────
