@@ -1484,10 +1484,19 @@
       if (!src || !image.isConnected) continue;
       // The band the card was queued under is the band it is painted under: a
       // grid card above the reader is still wanted, a shelf card above it is not.
-      // Before the page is up the loader is waiting on the leading titles of
-      // every shelf, including shelves below the held band: those are asked for
-      // by name, not by where they happen to sit.
-      if (!wantedHere(image) && !(gateNow && gateNow.has(image.closest('.card')?.__item))) continue;
+      // Before the page is up only the leading titles of every shelf are fetched,
+      // wherever they sit — the loader waits on those and nothing else, so a card
+      // in the band below the fold must not take a slot from one of them. A gate
+      // card still waiting on its details is passed over as well: its titled
+      // cover is a different file, and fetching the list page's still first is a
+      // picture the reveal throws away before it is ever seen.
+      if (!revealed) {
+        const item = image.closest('.card')?.__item;
+        if (!gateNow || !gateNow.has(item)) continue;
+        if (item && item.deferred && !item.facts) continue;
+      } else if (!wantedHere(image)) {
+        continue;
+      }
       let stale = 0;
       const settled = () => {
         if (artInFlight.get(image) !== settled) return;
@@ -1562,6 +1571,11 @@
     ].filter(Boolean);
     const viewport = window.innerHeight || 1;
     const parked = [];
+    // Before the page is up the loader is waiting on the leading GATE_TITLES of
+    // the four gate shelves, so that is also all the pump may ask for. Held as a set here
+    // rather than checked per card: the pass runs every few frames while the
+    // catalogue streams in, and the gate names the same titles each time.
+    const gate = revealed ? null : gateItems();
     for (const track of shelves) {
       for (const card of track.querySelectorAll('.card')) {
         const image = card.querySelector('img[data-src]');
@@ -1570,10 +1584,12 @@
         // keeps the one picture it was painted with. It is about to take the
         // row's real last title, and every change of its art before then — a
         // half-size file upgraded, a titled one replacing the list page's — is a
-        // blink in the corner of the shelf. Its one picture is asked for here
-        // rather than from the queue: it is the card the gate waits on, and a
-        // queue that hands it out late would hold the whole page.
+        // blink in the corner of the shelf. Once the page is up its one picture
+        // is asked for here rather than from the queue; before that it is left
+        // alone, because it is a copy of a row's last title and the loader waits
+        // on the leading titles, not on the ring's tail.
         if (card.__pin) {
+          if (gate && !gate.has(card.__item)) continue;
           if (!image.getAttribute('src') && !image.dataset.dead) {
             const first = image.dataset.low || image.dataset.full;
             if (first) {
@@ -1591,17 +1607,29 @@
         // is also what a closed See all grid gets — its cards are display:none,
         // so they measure zero and hand their art over on the next pass.
         // The grid keeps its band; the shelves do not, until the page is up:
-        // the loader waits for every cover on it, not only the ones the fold
-        // happens to reach, so none of them can change after it is gone.
-        const held = track.id === 'see-all-grid' ? withinGrid(box) : (revealed ? withinHold(box) : true);
+        // then the loader waits on the leading GATE_TITLES of the four gate
+        // shelves and nothing else. Holding every painted card — the whole
+        // window of every row, plus the ring's copies — put row one's covers
+        // ahead of row four's in the pump, so the page looked like it was
+        // waiting on all of them. The rest are dressed in round order once it
+        // is up.
+        const isGate = gate ? gate.has(card.__item) : false;
+        const held = track.id === 'see-all-grid'
+          ? withinGrid(box)
+          : (revealed ? withinHold(box) : isGate);
         if (!held) {
           if (image.getAttribute('src')) parked.push(image);
           // Out of the band the card keeps its small file on the frame: the
           // shelf is dressed before it is reached, instead of being a dark row
-          // that changes into its titled covers in front of the reader.
-          const frame = image.parentElement;
-          const low = image.dataset.low || '';
-          if (frame && low) frame.style.backgroundImage = `url("${low}")`;
+          // that changes into its titled covers in front of the reader. Before
+          // the page is up there is no band to dress and the gate did not ask
+          // for this file, so nothing is named here: a background URL is a
+          // request like any other.
+          if (revealed) {
+            const frame = image.parentElement;
+            const low = image.dataset.low || '';
+            if (frame && low) frame.style.backgroundImage = `url("${low}")`;
+          }
           continue;
         }
         // In the window, or waiting its turn either side of it. A card that is
@@ -1681,6 +1709,10 @@
         // picture it has: re-fetching a third of it to save a third of it would
         // cost a swap on the way out and buy nothing anyone sees.
         if (image.dataset.tier === 'full' && image.getAttribute('src')) continue;
+        // A gate card still waiting on its details has no picture worth asking
+        // for yet: the list page's still is about to give way to the titled one,
+        // and fetching both spends the loader's wait on a file it throws away.
+        if (gate && card.__item && card.__item.deferred && !card.__item.facts) continue;
         image.dataset.src = image.dataset.low || '';
         // The picture on the card has to be the one its item names now. A card
         // whose details landed while it was off screen kept the list page's
@@ -1705,11 +1737,13 @@
     // — title in the art, no caption — before it is scrolled to. It used to be
     // taken away with the big one, which is why a row only turned into its
     // titled covers in front of the reader.
-    parked.forEach((image) => {
-      const frame = image.parentElement;
-      const low = image.dataset.low || '';
-      if (frame && low) frame.style.backgroundImage = `url("${low}")`;
-    });
+    if (revealed) {
+      parked.forEach((image) => {
+        const frame = image.parentElement;
+        const low = image.dataset.low || '';
+        if (frame && low) frame.style.backgroundImage = `url("${low}")`;
+      });
+    }
     pumpArt(cap);
   };
 
@@ -1763,11 +1797,18 @@
   // for. The pass is a query and a few hundred rectangles, so it can afford to
   // run about as often as the art schedule does.
   const DETAILS_MS = 60;      // a pass gathers the screenful before it asks
-  // The loader waits on the leading titles of every shelf, not on every card a
-  // shelf holds: a row is fifty titles against a screen that shows ten, and
-  // dressing all fifty before the first paint spends the reader's wait on cards
-  // three flicks away.
+  // The loader waits on the leading titles of the four gate shelves, not on
+  // every card they hold: a row is fifty titles against a screen that shows ten,
+  // and dressing all fifty before the first paint spends the reader's wait on
+  // cards three flicks away. The last three visible shelves are held back
+  // entirely, so the wait is four shelves' leading ten rather than seven.
   const GATE_TITLES = 10;
+  // The shelves the loader waits on: the four rows a reader reaches first.
+  const GATE_ROWS = new Set(['continue-watching', 'trending', 'popular-movies', 'popular-tv']);
+  // The last three visible shelves. Their leading ten is not fetched before the
+  // reveal; the ordered pass seeds it on their first turn, then grows them by
+  // twenty a round like every other shelf.
+  const LATE_ROWS = new Set(['top-movies', 'top-tv', 'upcoming']);
   // After the page is up the rest are dressed in the order a reader walks them:
   // the next twenty of row one, then row two, and round again.
   const PRELOAD_BATCH = 20;
@@ -1984,11 +2025,14 @@
     scheduleArt();
   };
 
-  // The titles the first paint waits on: the leading GATE_TITLES of every shelf,
-  // in shelf order.
+  // The titles the first paint waits on: the leading GATE_TITLES of the four
+  // gate shelves, in shelf order.
   const gateItems = () => {
     const items = new Set();
     document.querySelectorAll('.row:not(.seeall)').forEach((row) => {
+      // Only the four shelves the loader waits on. The last three were not
+      // seeded before the reveal, so there is nothing on them to wait for.
+      if (!GATE_ROWS.has(row.dataset.section)) return;
       (rowItems.get(row.dataset.section) || []).slice(0, GATE_TITLES)
         .forEach((item) => items.add(item));
     });
@@ -2000,9 +2044,10 @@
       .filter((card) => items.has(card.__item));
   };
 
-  // The loader's own pass: the leading titles of each shelf, and nothing else.
-  // The rest of the catalogue is dressed after the reveal, in row order, so the
-  // wait before the first paint is ten covers a shelf rather than fifty.
+  // The loader's own pass: the leading titles of the four gate shelves, and
+  // nothing else. The rest of the catalogue — including the last three shelves'
+  // entire first ten — is dressed after the reveal, in row order, so the wait
+  // before the first paint is four shelves' leading covers rather than seven.
   const dressShelves = () => {
     if (revealed) return;
     const gate = gateItems();
@@ -2074,11 +2119,12 @@
   };
 
   // ── After the first paint ────────────────────────────────────────────────
-  // The loader waited on the leading GATE_TITLES of each shelf. The rest are
-  // dressed now, in the order a reader would walk them: the next PRELOAD_BATCH
-  // of row one, then row two, down the page, then the batch after that on row
-  // one again — so every shelf's near titles are ready before any shelf's far
-  // ones, and a horizontal scroll never meets a caption where a cover belongs.
+  // The loader waited on the leading GATE_TITLES of the four gate shelves. Now
+  // the rest are dressed in the order a reader would walk them: the last three
+  // shelves seed their first ten, and every shelf's next PRELOAD_BATCH follows,
+  // row one then row two down the page, then the batch after that on row one
+  // again — so every shelf's near titles are ready before any shelf's far ones,
+  // and a horizontal scroll never meets a caption where a cover belongs.
   const preloadStep = (plan, done) => {
     while (plan.length) {
       const chunk = plan[0].filter((item) => item && item.deferred && !item.facts);
@@ -2101,7 +2147,7 @@
     done?.();
   };
 
-  const startPreload = () => {
+  const startPreload = (done) => {
     const rows = [...document.querySelectorAll('.row:not(.seeall)')];
     const lists = rows.map((row) => (rowItems.get(row.dataset.section) || []).slice(GATE_TITLES));
     const plan = [];
@@ -2115,7 +2161,69 @@
       }
       if (!any) break;
     }
-    preloadStep(plan);
+    preloadStep(plan, done);
+  };
+
+  const settleLate = () => {
+    [...lateSettles.values()].forEach((settle) => settle());
+    lateSettles.clear();
+  };
+
+  // The catalogue's second half. The four gate shelves were seeded with their
+  // leading ten titles before the page went up; the last three visible shelves
+  // seed theirs here, on their own turn in the first round. From then on every
+  // shelf is read the same way: one row's next twenty at a time, in the order a
+  // reader walks them, each batch dressed before the next row is asked for. The
+  // loader is already gone, so this is preload, not first paint: no card is
+  // waiting on it, and the shelves grow behind the page.
+  const startGrowth = (done) => {
+    if (growthStarted) return;
+    if (!catalogueMore) {
+      // No controller is a catalogue that failed, or one the guard lifted the
+      // page ahead of. Dress whatever rows did stage; a controller that arrives
+      // later still starts the growth it was meant to.
+      startPreload(done);
+      return;
+    }
+    growthStarted = true;
+    const names = [...document.querySelectorAll('.row:not(.seeall)')]
+      .map((row) => row.dataset.section)
+      .filter((name) => name && name !== 'continue-watching');
+    let round = 0;
+    const step = () => {
+      round += 1;
+      let grew = false;
+      const chain = names.reduce((promise, name) => promise.then(async () => {
+        // A held-back shelf seeds its leading ten on its first turn; every
+        // shelf, including the held-back ones after that, grows twenty a round.
+        const count = round === 1 && LATE_ROWS.has(name) ? GATE_TITLES : PRELOAD_BATCH;
+        const added = await catalogueMore.growRow(name, count);
+        if (added && added.length) {
+          grew = true;
+          // Details first, the append second: by the time a card from this batch
+          // is painted it already names its titled cover, so no part of the row
+          // is ever a textless still that swaps in the open.
+          await warmDetails(added);
+          acceptLine({ sections: { [name]: added }, append: true, partial: true });
+          scheduleArt();
+        }
+        // A gate shelf is whole after its second batch (ten + twenty + twenty
+        // is the fifty it holds); a held-back one needs a third, because its ten
+        // arrived after the reveal. A shelf whose list has nothing more to give
+        // is done whenever that happens. Its leading slice can take the real
+        // last title now, rather than waiting for every other shelf to finish.
+        const whole = round >= (LATE_ROWS.has(name) ? 3 : 2);
+        if ((whole || !added || !added.length) && lateSettles.has(name)) {
+          lateSettles.get(name)();
+          lateSettles.delete(name);
+        }
+      }), Promise.resolve());
+      chain.then(() => {
+        if (grew && round < 8) step();
+        else done?.();
+      }).catch(() => done?.());
+    };
+    step();
   };
 
   // A picture arriving on a shelf that is standing still — held at zero until
@@ -3357,7 +3465,11 @@
 
     const setItems = (next, fromCatalogue = false) => {
       if (fromCatalogue) live = true;
-      items = next;
+      // A copy: the catalogue hands Upcoming's first payload over as its own
+      // working array and keeps pushing the next batches into it. Holding that
+      // reference here put every grown title on the shelf twice — once when the
+      // catalogue pushed it, once when the append line carried it in.
+      items = next.slice();
       aim = null;
       nodes.forEach((node) => { releaseArt(node); node.remove(); });
       nodes.clear();
@@ -3464,11 +3576,21 @@
     // the shelves until then, which is what a cold shelf looks like.
   };
 
-  // Everything under the top row waits for its artwork. Those rows are laid out
-  // and their pictures fetched behind `is-rows-pending`, and the shelf appears
-  // in one step once the pictures have decoded — never card by card.
+  // The first ten titles of every shelf wait for their artwork. Those rows are
+  // laid out and their gate covers fetched behind `is-rows-pending`, and the
+  // page appears in one step once those have decoded — never card by card. The
+  // rest of each shelf follows in row order once it is up.
   let revealed = false;
   let artPending = false;
+  // The catalogue's second half, once it hands one over: one row grown at a
+  // time, after the page is up.
+  let catalogueMore = null;
+  let growthStarted = false;
+  // Rows whose leading slice is still holding its stand-in, keyed by section.
+  // That slice is a copy of the row's last title, not one of the ten the loader
+  // waits on, so it is settled after that row's ordered pass — the same place
+  // its title is dressed.
+  const lateSettles = new Map();
 
   const reveal = () => {
     if (revealed) return;
@@ -3478,15 +3600,19 @@
     // loader, which is what puts their cards in line for their details.
     scheduleArt();
     scheduleDetails();
-    // The page is up on ten covers a shelf; the remaining titles follow in row
-    // order, twenty at a time, until the catalogue is dressed.
-    startPreload();
+    // The page is up on ten covers across the four gate shelves; the last three
+    // fill in behind it, then every shelf grows in row order, twenty at a time,
+    // until it is whole. The leading slices
+    // settle at the end: a slice shows the row's last title, which is the one
+    // the ordered pass reaches last, and dressing it before the loader lifts is
+    // the whole page's work done before the first ten.
+    startGrowth(settleLate);
   };
 
   // A picture that never arrives is the same as one that arrives late: the wait
   // is capped, so a broken URL cannot leave the page behind its loader. The cap
   // sits well past a slow link's answer on purpose — the page is waiting for the
-  // titled artwork of every card the reader will see, and on a phone connection
+  // titled artwork of the leading ten of every shelf, and on a phone connection
   // that is seconds, not frames. A file that really is gone stops waiting on its
   // own: three failed tries mark the card dead, which the gate reads as settled.
   const ART_WAIT_MS = 15000;
@@ -3498,9 +3624,10 @@
     else image.onload = image.onerror = done;
   })));
 
-  // Only what is on screen: the cards the window has painted for the rows in
-  // view, plus the billboard's own artwork. Waiting on rows below the fold
-  // would mean waiting on pictures nobody can see yet.
+  // Only the gate: the leading GATE_TITLES of the four gate shelves, whether or
+  // not the fold reaches them yet, plus the billboard's own artwork. Waiting on
+  // the rest of a shelf would mean waiting on pictures nobody is looking at,
+  // which is the work the ordered pass does after the page is up.
   const revealWhenArtReady = () => {
     // Ask for the screenful before measuring it: the schedule has only just been
     // handed these cards, and what the page waits on is the pictures it can see.
@@ -3514,9 +3641,10 @@
     // The shelves are part of the promise now: a row four screens down that
     // turned into its titled covers after the loader was gone is exactly what
     // this gate is for.
-    // The leading titles of every shelf — what the first screen and its first
-    // flick can reach — not all fifty a shelf holds. The rest are dressed in
-    // order once the page is up, starting with the very next card.
+    // The leading titles of the four gate shelves — what the first screen and
+    // its first flick can reach — not all fifty a shelf holds. The last three
+    // shelves' first ten, and the rest of the gate shelves, are dressed in order
+    // once the page is up, starting with the very next card.
     const visibleCards = gateCards;
     // The billboard's slide is part of the screenful. Only the one showing: the
     // rest of the set is decoded when it is a slide away from being shown.
@@ -3534,8 +3662,8 @@
     let heroReady = !heroArt.length;
     decodeSources(heroArt).then(() => { heroReady = true; });
     const step = () => {
-      // The whole screenful in flight, not the idle batch: 32 at a time is what
-      // gets every visible card its source before the page shows itself.
+      // The whole gate in flight, not the idle batch: twenty at a time is what
+      // gets every leading card its source before the page shows itself.
       pumpArt(ART_SCREEN);
       // The screen's details go out while the page is still behind the loader: a
       // card waiting on them has nothing to paint, so the first thing on screen
@@ -4450,7 +4578,16 @@
     dressShelves();
     // The last stage is the whole catalogue: every shelf is as long as it will
     // get, so each row can stop holding its stand-in for the real last title.
-    if (!data.partial) rowModels.forEach((model) => model.settle?.());
+    // Not now, though — a settle is the row's last title, and the loader is
+    // waiting on the first ten. It runs with the ordered pass once the page is
+    // up. A page that revealed early (the guard) has no ordered pass to wait
+    // for, so those rows settle at once.
+    if (!data.partial) {
+      rowModels.forEach((model, row) => {
+        if (revealed) model.settle?.();
+        else lateSettles.set(row.dataset.section, () => model.settle?.());
+      });
+    }
     // Only the last stage lifts the loader. The first one carries a single shelf
     // and the billboard; showing the page on it is what put the reader in front
     // of a screen that filled in shelf by shelf, card by card. Every stage stays
@@ -4469,14 +4606,22 @@
       reveal();
       return;
     }
-    // The loader now waits for the whole catalogue, so a request that never
-    // answers must not hold it forever: a dropped connection is not a catalogue,
-    // and the page shows what painted rather than sitting behind its wheel.
+    // The loader waits on the gate shelves, so a request that never answers must
+    // not hold it forever: a dropped connection is not a catalogue, and the page
+    // shows what painted rather than sitting behind its wheel.
     const guard = setTimeout(() => { if (!revealed) reveal(); }, 25000);
-    window.catalogue.catalogue(acceptLine)
-      .then(() => {
+    // The last three visible shelves are handed over as `lateRows`: the
+    // catalogue leaves them empty and the ordered pass seeds them after the
+    // page is up.
+    window.catalogue.catalogue(acceptLine, { gate: GATE_TITLES, lateRows: [...LATE_ROWS] })
+      .then((more) => {
+        catalogueMore = more;
         clearTimeout(guard);
         if (!artPending) reveal();
+        // A page the guard lifted early (or a catalogue that took longer than
+        // its first ten to hand over) still gets the rest of its rows, behind
+        // the page that is already up.
+        else if (revealed) startGrowth(settleLate);
       })
       .catch((error) => {
         clearTimeout(guard);
