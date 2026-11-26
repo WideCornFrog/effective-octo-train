@@ -1582,7 +1582,10 @@
         // A hidden row, or one past the held band: the picture goes back. This
         // is also what a closed See all grid gets — its cards are display:none,
         // so they measure zero and hand their art over on the next pass.
-        const held = track.id === 'see-all-grid' ? withinGrid(box) : withinHold(box);
+        // The grid keeps its band; the shelves do not, until the page is up:
+        // the loader waits for every cover on it, not only the ones the fold
+        // happens to reach, so none of them can change after it is gone.
+        const held = track.id === 'see-all-grid' ? withinGrid(box) : (revealed ? withinHold(box) : true);
         if (!held) {
           if (image.getAttribute('src')) parked.push(image);
           // Out of the band the card keeps its small file on the frame: the
@@ -1671,7 +1674,19 @@
         // cost a swap on the way out and buy nothing anyone sees.
         if (image.dataset.tier === 'full' && image.getAttribute('src')) continue;
         image.dataset.src = image.dataset.low || '';
-        if (!image.getAttribute('src')) artRing.push(image);
+        // The picture on the card has to be the one its item names now. A card
+        // whose details landed while it was off screen kept the list page's
+        // still — the new file was only queued when the card had no picture at
+        // all — and that is the textless cover swapping to the titled one the
+        // moment it is scrolled to.
+        const current = image.getAttribute('src');
+        if (!current) {
+          artRing.push(image);
+        } else if (current !== image.dataset.src) {
+          artInFlight.get(image)?.();
+          image.removeAttribute('src');
+          artRing.push(image);
+        }
       }
     }
     // Parked after the queues are built: handing a picture back frees a slot,
@@ -1955,7 +1970,6 @@
   // moment they arrive. The lookups are one request per title either way; this
   // spends them in the quiet after the page is up instead of in front of it.
   const dressShelves = () => {
-    if (!revealed) return;
     let added = false;
     for (const card of document.querySelectorAll('.row:not(.seeall) .card')) {
       const item = card.__item;
@@ -1980,7 +1994,7 @@
     // The ring waits for the page to be up. Its forty lookups and forty pictures
     // would otherwise be running against the screen's own while the loader is
     // still waiting on them, and the first paint is the thing this is for.
-    const pending = detailQueue.length ? detailQueue : (revealed ? detailRing : null);
+    const pending = detailQueue.length ? detailQueue : detailRing;
     if (!pending) return;
     const keys = [];
     const seen = new Set();
@@ -3405,12 +3419,14 @@
     buildArtQueue(ART_SCREEN);
     const onScreen = (box) => box.width > 0 && box.bottom > 0 && box.top < window.innerHeight
       && box.right > 0 && box.left < window.innerWidth;
-    // Every card on screen, asked again each pass rather than snapshotted once:
-    // the pump hands pictures out a batch at a time, and revealing on whichever
-    // batch happened to be in flight is how a shelf appeared bare for a moment
-    // while its own pictures were still arriving behind the loader.
-    const visibleCards = () => [...document.querySelectorAll('.row:not(.seeall) .card')]
-      .filter((card) => onScreen(card.getBoundingClientRect()));
+    // Every card on the page, asked again each pass rather than snapshotted
+    // once: the pump hands pictures out a batch at a time, and revealing on
+    // whichever batch happened to be in flight is how a shelf appeared bare for
+    // a moment while its own pictures were still arriving behind the loader.
+    // The shelves are part of the promise now: a row four screens down that
+    // turned into its titled covers after the loader was gone is exactly what
+    // this gate is for.
+    const visibleCards = () => [...document.querySelectorAll('.row:not(.seeall) .card')];
     // The billboard's slide is part of the screenful. Only the one showing: the
     // rest of the set is decoded when it is a slide away from being shown.
     const currentKey = (heroSets[document.body.dataset.view] || heroSets.home || [])[heroIndex];
@@ -3447,7 +3463,7 @@
       // A lookup already on the wire for this screenful still resolves into a
       // repaint: waiting for the ones asked for is the difference between the
       // page showing itself settled and showing itself a frame before it is.
-      const waiting = detailBusy || detailQueue.length > 0;
+      const waiting = detailBusy || detailQueue.length > 0 || detailRing.length > 0;
       const ready = heroReady && !waiting && dressed && cards.every((card) => {
         const image = card.querySelector('img[data-src]');
         const item = card.__item;
@@ -3458,14 +3474,16 @@
           return Boolean(image.dataset.dead || (image.getAttribute('src')
             && image.complete && image.naturalWidth > 0));
         }
-        return image.dataset.dead || (image.getAttribute('src')
-          && image.dataset.tier === 'full' && image.complete && image.naturalWidth > 0
-          // The file it is showing has to be the one its item names now: a card
-          // whose details landed a frame ago still holds the list page's
-          // picture until the next art pass re-points it, and revealing on that
-          // is the textless cover swapping to the titled one in front of the
-          // reader.
-          && (!image.dataset.full || image.getAttribute('src') === image.dataset.full));
+        // The file it is showing has to be the one its item names now: a card
+        // whose details landed a frame ago still holds the list page's picture
+        // until the next art pass re-points it, and revealing on that is the
+        // textless cover swapping to the titled one in front of the reader.
+        // Off screen the small file is the one it will show first, so either
+        // size of the same named picture counts as dressed.
+        const shot = image.getAttribute('src');
+        return image.dataset.dead || Boolean(shot
+          && (shot === image.dataset.full || shot === image.dataset.low)
+          && image.complete && image.naturalWidth > 0);
       });
       if (ready || performance.now() - started > ART_WAIT_MS) {
         artPending = false;
