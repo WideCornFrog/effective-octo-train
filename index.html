@@ -1468,6 +1468,7 @@
 
   const pumpArt = (cap) => {
     const limit = cap || ART_BATCH;
+    const gateNow = revealed ? null : gateItems();
     // Slots are counted off the in-flight map rather than a running total: a
     // card re-pointed while its picture was on the wire replaces its own entry,
     // and a counter kept alongside that would lose the slot every time — eight
@@ -1483,7 +1484,10 @@
       if (!src || !image.isConnected) continue;
       // The band the card was queued under is the band it is painted under: a
       // grid card above the reader is still wanted, a shelf card above it is not.
-      if (!wantedHere(image)) continue;
+      // Before the page is up the loader is waiting on the leading titles of
+      // every shelf, including shelves below the held band: those are asked for
+      // by name, not by where they happen to sit.
+      if (!wantedHere(image) && !(gateNow && gateNow.has(image.closest('.card')?.__item))) continue;
       let stale = 0;
       const settled = () => {
         if (artInFlight.get(image) !== settled) return;
@@ -1759,6 +1763,14 @@
   // for. The pass is a query and a few hundred rectangles, so it can afford to
   // run about as often as the art schedule does.
   const DETAILS_MS = 60;      // a pass gathers the screenful before it asks
+  // The loader waits on the leading titles of every shelf, not on every card a
+  // shelf holds: a row is fifty titles against a screen that shows ten, and
+  // dressing all fifty before the first paint spends the reader's wait on cards
+  // three flicks away.
+  const GATE_TITLES = 10;
+  // After the page is up the rest are dressed in the order a reader walks them:
+  // the next twenty of row one, then row two, and round again.
+  const PRELOAD_BATCH = 20;
   const detailQueue = [];     // cards on screen, waiting on their details
   const detailRing = [];      // the ten either side and the shelf below
   let detailBusy = false;
@@ -1788,9 +1800,13 @@
     // the screen, which the page is waiting to show, and the ring around them,
     // which is only being pre-rendered. The screen goes in one request of its
     // own, so its answer is not held up by the forty pictures behind it.
+    // Before the page is up only the leading titles of each shelf are asked
+    // for; everything else waits for the ordered pass that follows the reveal.
+    const gate = revealed ? null : gateItems();
     for (const card of cards) {
       const item = card.__item;
       if (!item || !item.deferred || item.facts || card.__asked) continue;
+      if (gate && !gate.has(item)) continue;
       const box = card.getBoundingClientRect();
       if (box.width < 5 || box.bottom <= top || box.top >= bottom) continue;
       card.__asked = true;
@@ -1968,16 +1984,33 @@
     scheduleArt();
   };
 
-  // Every painted card on the shelves, not just the band around the fold: a row
-  // four screens down that still holds the list page's textless still and a
-  // caption until it is scrolled to is a shelf changing under the reader at the
-  // moment they arrive. The lookups are one request per title either way; this
-  // spends them in the quiet after the page is up instead of in front of it.
+  // The titles the first paint waits on: the leading GATE_TITLES of every shelf,
+  // in shelf order.
+  const gateItems = () => {
+    const items = new Set();
+    document.querySelectorAll('.row:not(.seeall)').forEach((row) => {
+      (rowItems.get(row.dataset.section) || []).slice(0, GATE_TITLES)
+        .forEach((item) => items.add(item));
+    });
+    return items;
+  };
+  const gateCards = () => {
+    const items = gateItems();
+    return [...document.querySelectorAll('.row:not(.seeall) .card')]
+      .filter((card) => items.has(card.__item));
+  };
+
+  // The loader's own pass: the leading titles of each shelf, and nothing else.
+  // The rest of the catalogue is dressed after the reveal, in row order, so the
+  // wait before the first paint is ten covers a shelf rather than fifty.
   const dressShelves = () => {
+    if (revealed) return;
+    const gate = gateItems();
     let added = false;
     for (const card of document.querySelectorAll('.row:not(.seeall) .card')) {
       const item = card.__item;
       if (!item || !item.deferred || item.facts || card.__asked) continue;
+      if (!gate.has(item)) continue;
       // The ring, not the screen's own queue: a card the reader has just
       // scrolled to still goes first, and the shelves below are dressed in the
       // quiet between one screenful and the next.
@@ -2038,6 +2071,51 @@
       detailDue = performance.now() + DETAILS_MS;
       flushDetails();
     }, wait);
+  };
+
+  // ── After the first paint ────────────────────────────────────────────────
+  // The loader waited on the leading GATE_TITLES of each shelf. The rest are
+  // dressed now, in the order a reader would walk them: the next PRELOAD_BATCH
+  // of row one, then row two, down the page, then the batch after that on row
+  // one again — so every shelf's near titles are ready before any shelf's far
+  // ones, and a horizontal scroll never meets a caption where a cover belongs.
+  const preloadStep = (plan, done) => {
+    while (plan.length) {
+      const chunk = plan[0].filter((item) => item && item.deferred && !item.facts);
+      if (!chunk.length) {
+        plan.shift();
+        continue;
+      }
+      const keys = [...new Set(chunk.map(detailKey))];
+      // One batch at a time: the order is the point, so a row's next twenty is
+      // answered before the row after it is asked about.
+      requestDetails(keys, chunk).finally(() => {
+        plan.shift();
+        scheduleArt();
+        // Off the promise, onto the loop: an answer should not hold the next
+        // row's request in a stack nothing else can use.
+        setTimeout(() => preloadStep(plan, done), 0);
+      });
+      return;
+    }
+    done?.();
+  };
+
+  const startPreload = () => {
+    const rows = [...document.querySelectorAll('.row:not(.seeall)')];
+    const lists = rows.map((row) => (rowItems.get(row.dataset.section) || []).slice(GATE_TITLES));
+    const plan = [];
+    for (let round = 0; ; round += 1) {
+      let any = false;
+      for (const items of lists) {
+        const chunk = items.slice(round * PRELOAD_BATCH, (round + 1) * PRELOAD_BATCH);
+        if (!chunk.length) continue;
+        any = true;
+        plan.push(chunk);
+      }
+      if (!any) break;
+    }
+    preloadStep(plan);
   };
 
   // A picture arriving on a shelf that is standing still — held at zero until
@@ -2133,6 +2211,9 @@
   // whole page of cards, never a single one. All of this runs off the one
   // /api/catalog payload, so scrolling a row costs no further requests.
   const rowModels = new Map();
+  // What each row holds, in order: the loader names its leading titles from
+  // here, and the pass after the first paint walks the rest row by row.
+  const rowItems = new Map();
 
   // The shelves as one set: parked when nothing is showing them, woken in the
   // order the reader comes back to them. Parking starts below the first screen —
@@ -3397,6 +3478,9 @@
     // loader, which is what puts their cards in line for their details.
     scheduleArt();
     scheduleDetails();
+    // The page is up on ten covers a shelf; the remaining titles follow in row
+    // order, twenty at a time, until the catalogue is dressed.
+    startPreload();
   };
 
   // A picture that never arrives is the same as one that arrives late: the wait
@@ -3430,7 +3514,10 @@
     // The shelves are part of the promise now: a row four screens down that
     // turned into its titled covers after the loader was gone is exactly what
     // this gate is for.
-    const visibleCards = () => [...document.querySelectorAll('.row:not(.seeall) .card')];
+    // The leading titles of every shelf — what the first screen and its first
+    // flick can reach — not all fifty a shelf holds. The rest are dressed in
+    // order once the page is up, starting with the very next card.
+    const visibleCards = gateCards;
     // The billboard's slide is part of the screenful. Only the one showing: the
     // rest of the set is decoded when it is a slide away from being shown.
     const currentKey = (heroSets[document.body.dataset.view] || heroSets.home || [])[heroIndex];
@@ -3514,6 +3601,7 @@
     const row = document.querySelector(`.row[data-section="${name}"]`);
     if (!row || !items || !items.length) return;
     markLive(items);
+    rowItems.set(name, items.slice());
     rowModels.get(row)?.setItems(items, true);
   };
 
@@ -3523,6 +3611,7 @@
     const row = document.querySelector(`.row[data-section="${name}"]`);
     if (!row || !items || !items.length) return;
     markLive(items);
+    rowItems.set(name, (rowItems.get(name) || []).concat(items));
     rowModels.get(row)?.addItems(items);
   };
 
