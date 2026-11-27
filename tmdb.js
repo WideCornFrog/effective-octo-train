@@ -222,6 +222,8 @@ document.documentElement.classList.remove('no-js');
       // w1280 through the details pass.
       still: image(backdrop || poster, 'w780'),
       backdrop: image(backdrop, 'w1280'),
+      // The vertical cut a phone billboard wears in place of the 16:9 still.
+      poster: image(poster, 'w780'),
       logo: '',
       // True when the picture carries the title itself: a poster always does.
       titled: Boolean(poster && !backdrop),
@@ -452,6 +454,7 @@ document.documentElement.classList.remove('no-js');
         overview: item.overview,
         backdrop: item.backdrop,
         still: item.still,
+        poster: item.poster,
         logo: item.logo,
         facts: item.facts || {},
         trailer: (item.facts || {}).trailer || '',
