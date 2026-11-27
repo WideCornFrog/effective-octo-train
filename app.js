@@ -3106,6 +3106,8 @@
   // and hopped into line when it ended. One <img>, never faded, is painted
   // exactly the way the card under it is painted.
   const previewArt = preview.querySelector('.preview__art');
+  const previewReveal = preview.querySelector('.preview__reveal');
+  const previewBody = preview.querySelector('.preview__body');
   let travelFrame = 0;
 
   // `source` is the card's own <img>, not just a URL: copying its srcset and
@@ -3789,6 +3791,20 @@
     paintPreview(card);
     preview.hidden = false;
     placePreview(card);
+    // The reveal's height is the measured sheet: its bottom edge is where the
+    // panel's bottom stroke draws, so the two cannot drift apart while the
+    // sheet opens. A card switch while the panel is already open sets the new
+    // height without replaying the opening transition.
+    const opening = !preview.classList.contains('is-open');
+    if (!opening) previewReveal.style.transition = 'none';
+    // Fractional, not rounded: the sheet's own height is what the panel's edge
+    // has to land on, and a whole-pixel ceiling would clip the bottom padding.
+    const sheetHeight = previewBody.getBoundingClientRect().height;
+    preview.style.setProperty('--preview-body-h', `${sheetHeight}px`);
+    if (!opening) {
+      void previewReveal.offsetHeight;
+      previewReveal.style.transition = '';
+    }
     requestAnimationFrame(() => preview.classList.add('is-open'));
   };
 
