@@ -1947,7 +1947,6 @@ dialog.notice :focus-visible {
    button off the panel's edge. */
 .preview__bottom .preview__runtime {
   grid-column: 1;
-  justify-self: start;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -2954,6 +2953,88 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
     width: 13px;
     height: 13px;
   }
+}
+
+/* The hover sheet on a phone. With two cards across, the panel is only as wide
+   as a card, so the one measured facts line is replaced by four tidy rows:
+   kind + release, certificate + score, genres, then runtime + My List. The
+   genre line is the one that may end in an ellipsis; every other row is sized
+   to fit the sheet without wrapping. */
+@media (max-width: 700px) {
+  #card-preview .preview__body-inner {
+    gap: 4px;
+    padding: 8px 10px 10px;
+  }
+
+  /* A two-by-two facts grid. The tags wrapper is dissolved so the kind,
+     release and certificate become cells themselves; the explicit rows keep
+     the pairing, and auto columns close the gap when a title has no
+     certificate or no release label to print. */
+  #card-preview .preview__facts {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+    align-items: center;
+    gap: 4px 6px;
+    font-size: 12px;
+    min-width: 0;
+  }
+
+  #card-preview .preview__tags { display: contents; }
+
+  #card-preview .preview__kind,
+  #card-preview .preview__release { grid-row: 1; }
+
+  #card-preview .preview__cert,
+  #card-preview .preview__rating { grid-row: 2; }
+
+  #card-preview .preview__rating { justify-self: start; }
+
+  /* A little less air inside each chip gives the longest release labels room
+     beside the kind at this width. */
+  #card-preview .preview__kind,
+  #card-preview .preview__release,
+  #card-preview .preview__cert {
+    padding-left: 0.45em;
+    padding-right: 0.45em;
+  }
+
+  #card-preview .preview__genres {
+    margin-top: 0;
+    max-width: 100%;
+  }
+
+  /* Duration and My List share the last row. The pill gives up a few pixels of
+     padding and icon size so the longest film runtime still fits beside it. */
+  #card-preview .preview__bottom { gap: 6px; }
+  #card-preview .preview__bottom .preview__runtime { top: 2px; font-size: 11px; }
+  #card-preview .preview__list { gap: 4px; padding: 4px 8px 4px 7px; font-size: 10.5px; }
+  #card-preview .preview__ico { width: 11px; height: 11px; }
+}
+
+/* At the narrowest phones a card is only about 107px wide. The sheet gives up
+   a little side padding, drops the My List plus, and steps the facts down so
+   the four rows still sit inside the panel rather than clipping a chip at its
+   edge. */
+@media (max-width: 350px) {
+  #card-preview .preview__body-inner { padding: 8px 8px 10px; }
+
+  #card-preview .preview__facts {
+    gap: 4px 3px;
+    font-size: 9px;
+  }
+
+  #card-preview .preview__kind,
+  #card-preview .preview__release,
+  #card-preview .preview__cert {
+    padding-left: 0.3em;
+    padding-right: 0.3em;
+  }
+
+  #card-preview .preview__bottom { gap: 4px; }
+  #card-preview .preview__bottom .preview__runtime { font-size: 10px; }
+  #card-preview .preview__list { gap: 0; padding: 4px 5px; font-size: 9.5px; }
+  #card-preview .preview__ico { display: none; }
 }
 
 /* ── No key ─────────────────────────────────────────────────────────────────
