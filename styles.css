@@ -1753,6 +1753,11 @@ dialog.notice :focus-visible {
      sheet's text out of subpixel antialiasing for the length of the slide and
      reads as the duration bobbing up and settling back. */
   pointer-events: none;
+  /* A swipe that starts on the panel is the page's, not the panel's. The sheet
+     is not a scrollbox, and a fixed box that swallowed the gesture left a phone
+     unable to scroll while the panel was open. Vertical pans pass through to the
+     page; taps still belong to the panel. */
+  touch-action: pan-y;
   /* The panel sits over the card it belongs to, so it has to carry the card's
      hand: without it the cursor turns back into an arrow the moment it lands. */
   cursor: pointer;
@@ -2792,6 +2797,13 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
 }
 
 @media (max-width: 700px) {
+  /* A phone has no pointer to hover an arrow with and no room to spend 60px a
+     side on one. The shelf is laid out as two whole cards with 15px neighbours
+     (see setupRow), so the glass pagers are removed rather than left as dead
+     controls over the slices. */
+  .row__prev,
+  .row__next { display: none; }
+
   /* Room is the whole problem here: the bar keeps the burger, the wordmark, search
      and the account, and gives up everything that is not those four. */
   .topbar {
