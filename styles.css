@@ -1913,10 +1913,10 @@ dialog.notice :focus-visible {
      measured height was the obvious way to write this, and it re-laid out the
      sheet — and the panel's own box with it — on every one of the twenty frames
      the 0.34s took, for every card the pointer crossed. The sheet now keeps its
-     full height and is clipped from its top edge, which is the same movement to
-     the eye (the text is clipped, never reflowed, either way) with no layout in
-     the animation at all: only the clip moves. */
-  clip-path: inset(100% 0 0 0);
+     full height and is clipped from its bottom edge, so the revealed edge travels
+     down from under the artwork; the text is clipped, never reflowed, and there
+     is no layout in the animation at all: only the clip moves. */
+  clip-path: inset(0 0 100% 0);
   transition: clip-path 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -2934,3 +2934,15 @@ body.is-unconfigured .loader {
   background: rgba(255, 255, 255, 0.08);
   font-size: 13px;
 }
+
+/* ── No JavaScript ─────────────────────────────────────────────────────────
+   <html> starts with .no-js; tmdb.js removes it before this stylesheet is
+   parsed, so these rules apply only when scripting is unavailable. They used to
+   be a second stylesheet behind <noscript>; keeping them here means one CSS
+   request and the same readable page when the scripts cannot run. */
+.no-js body.is-hero-pending .hero__content { visibility: visible; }
+.no-js body.is-hero-pending .card__progress { display: block; }
+.no-js body.is-rows-pending .loader { display: none; }
+.no-js body.is-rows-pending { height: auto; overflow: visible; }
+.no-js body.is-rows-pending .hero,
+.no-js body.is-rows-pending .row { visibility: visible; }
