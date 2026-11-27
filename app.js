@@ -44,8 +44,14 @@
   // whole cards with a 15px neighbour at each edge, and the glass pagers are
   // hidden by the stylesheet.
   const COMPACT_SHELF = window.matchMedia('(max-width: 700px)');
+  // A touch screen has no hover, so a card preview is opened by tapping. Shared
+  // by the billboard timer, which leaves its slide alone while one is open, and
+  // the preview's own tap handling.
+  const COARSE_POINTER = window.matchMedia('(hover: none), (pointer: coarse)');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let heroIndex = 0;
+  // Set on every billboard paint; read by the preview's scroll listener below.
+  let heroShiftUntil = 0;
   // True until the catalogue answers: the billboard stays blank rather than
   // painting a title, logo and backdrop that a later stage would replace.
   let heroPending = true;
@@ -161,6 +167,11 @@
     if (heroPending) return;
     const keys = heroSets[document.body.dataset.view] || heroSets.home;
     heroIndex = (index + keys.length) % keys.length;
+    // A slide's copy can be a line taller or shorter than the one it replaces.
+    // The scroll anchoring that follows is the page keeping the shelves still,
+    // not the reader scrolling; the open preview's scroll handler uses this
+    // window to re-seat the panel instead of closing it.
+    heroShiftUntil = performance.now() + 600;
     const slide = heroTitles[keys[heroIndex]];
     // One slide of lead time for the next swap's decode.
     preloadSlide(keys[(heroIndex + 1) % keys.length]);
@@ -3380,6 +3391,18 @@
     return parts.join(' · ');
   };
 
+  // The compact sheet's last row holds the duration and the My List pill in the
+  // width of a phone card. A series' full "3 seasons · 71m" is wider than that
+  // space at the narrowest widths, so the season count is what stays; a film's
+  // runtime already fits. This is only used where the full line would clip.
+  const compactDuration = (item) => {
+    const facts = item.facts || {};
+    if (item.media === 'tv' && facts.seasons) {
+      return `${facts.seasons} season${facts.seasons === 1 ? '' : 's'}`;
+    }
+    return duration(item);
+  };
+
   // ── Trailer ─────────────────────────────────────────────────────────────────
   // The artwork turns into the title's trailer once the pointer has rested on
   // the card, so skimming a row does not fire off a frame per card. TMDB hands
@@ -3610,7 +3633,11 @@
     const rank = Number(card.__rank) || 0;
     previewRank.hidden = !rank;
     previewRank.textContent = rank ? String(rank) : '';
-    previewRuntime.textContent = duration(item);
+    // Below about 450px the sheet is narrow enough that a series' full
+    // "3 seasons · 71m" cannot sit beside the pill; the card's width is read
+    // here because the panel is placed after this paint.
+    const compactRuntime = COMPACT_SHELF.matches && card.getBoundingClientRect().width < 170;
+    previewRuntime.textContent = compactRuntime ? compactDuration(item) : duration(item);
     previewRuntime.hidden = !previewRuntime.textContent;
     previewGenres.textContent = (facts.genres || []).join(' · ');
     previewGenres.hidden = !previewGenres.textContent;
@@ -3651,28 +3678,35 @@
     // because a system font can run several percent wider than the one this was
     // designed on, and a guess wrapped the certificate onto a line of its own.
     preview.style.removeProperty('--facts-size');
-    const factsLine = preview.querySelector('.preview__facts');
-    // The line has to fit the panel's width in one row. Stepping it down half a
-    // point at a time and measuring after each step is the obvious way, and it
-    // is a forced layout per step, on every card the pointer crosses. Text width
-    // is proportional to font size, so one measurement of the overflow gives the
-    // size to try directly; one more measurement confirms it, and only a font
-    // that wraps unpredictably costs a third.
-    let factsFit = false;
-    let size = 12;
-    if (factsLine.scrollWidth > factsLine.clientWidth) {
-      const fitted = (12 * factsLine.clientWidth) / factsLine.scrollWidth;
-      size = Math.min(12, Math.max(9.5, Math.ceil(fitted * 2) / 2));
+    if (!COMPACT_SHELF.matches) {
+      const factsLine = preview.querySelector('.preview__facts');
+      // The line has to fit the panel's width in one row. Stepping it down half a
+      // point at a time and measuring after each step is the obvious way, and it
+      // is a forced layout per step, on every card the pointer crosses. Text width
+      // is proportional to font size, so one measurement of the overflow gives the
+      // size to try directly; one more measurement confirms it, and only a font
+      // that wraps unpredictably costs a third.
+      let factsFit = false;
+      let size = 12;
+      if (factsLine.scrollWidth > factsLine.clientWidth) {
+        const fitted = (12 * factsLine.clientWidth) / factsLine.scrollWidth;
+        size = Math.min(12, Math.max(9.5, Math.ceil(fitted * 2) / 2));
+      }
+      for (; size >= 9.5; size -= 0.5) {
+        preview.style.setProperty('--facts-size', `${size}px`);
+        factsFit = factsLine.scrollWidth <= factsLine.clientWidth;
+        if (factsFit) break;
+      }
+      // Even the smallest line overflows: let the chips wrap inside their group
+      // rather than run past the panel, where the edge would cut the score off.
+      if (!factsFit) preview.style.removeProperty('--facts-size');
+      preview.classList.toggle('is-facts-tight', !factsFit);
+    } else {
+      // The phone sheet stacks the facts in two rows (see the compact sheet in
+      // the stylesheet); there is no single line to step down, and the grid is
+      // sized by its own two columns.
+      preview.classList.remove('is-facts-tight');
     }
-    for (; size >= 9.5; size -= 0.5) {
-      preview.style.setProperty('--facts-size', `${size}px`);
-      factsFit = factsLine.scrollWidth <= factsLine.clientWidth;
-      if (factsFit) break;
-    }
-    // Even the smallest line overflows: let the chips wrap inside their group
-    // rather than run past the panel, where the edge would cut the score off.
-    if (!factsFit) preview.style.removeProperty('--facts-size');
-    preview.classList.toggle('is-facts-tight', !factsFit);
     // The card's own spot, exactly: the panel's picture has to sit on the same
     // fraction of a pixel the card's does, or the two copies disagree by the bit
     // a snap moved them.
@@ -3904,10 +3938,9 @@
   // A touch screen opens the same panel with a tap: there is no hover to open
   // it with, and no pointerout to close it. A tap on a card shows it, a tap
   // anywhere else puts it away, and a horizontal swipe pulls the row it grew
-  // from (see the touch driver below). The card kept here also lets a panel whose facts are still
-  // on the wire open when they land, rather than waiting for a hover a touch
-  // screen never sends.
-  const COARSE_POINTER = window.matchMedia('(hover: none), (pointer: coarse)');
+  // from (see the touch driver below). The card kept here also lets a panel
+  // whose facts are still on the wire open when they land, rather than waiting
+  // for a hover a touch screen never sends.
   let tapPending = null;
   // A drag that came off the panel is not a tap on whatever is left under the
   // finger when it ends. Short enough that a deliberate tap right after still
@@ -4055,6 +4088,18 @@
     // row under it, and the panel travels with its card until the finger lifts.
     // Hiding the touch target mid-gesture would stop the pull after one move.
     if (panelTouch?.mode === 'x') return;
+    // A billboard slide changes the hero's height, and scroll anchoring moves
+    // the page by the same amount to keep the shelves where they were. That is
+    // not the reader scrolling the card away, so put the panel back on its card
+    // and leave it open. A later, real scroll still closes it.
+    if (hoveredCard && !preview.hidden && performance.now() < heroShiftUntil) {
+      if (hoveredCard.isConnected) {
+        preview.style.top = `${hoveredCard.getBoundingClientRect().top}px`;
+      } else {
+        hidePreview(0);
+      }
+      return;
+    }
     hidePreview(0);
   }, true);
   window.addEventListener('scroll', landOnPointer, true);
