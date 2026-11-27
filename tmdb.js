@@ -10,6 +10,11 @@
 // The key lives in tmdb-config.js, which is public the moment it is deployed.
 // That is the trade this build makes; the README says so in as many words.
 
+// styles.css uses .no-js for the rules that should apply only when scripting is
+// unavailable. This file is parsed before that stylesheet, so removing the
+// class here happens before the first paint; with scripting off it stays put.
+document.documentElement.classList.remove('no-js');
+
 (() => {
   const CONFIG = window.TMDB_CONFIG || {};
   const KEY = String(CONFIG.key || '').trim();
@@ -903,4 +908,9 @@
     comingSoon,
     inTheaters,
   };
+
+  // The page's catalogue handle. This used to be set by a boot script in
+  // index.html; keeping it here leaves the page with markup only, and app.js
+  // still finds it when it runs at the end of the body.
+  window.catalogue = window.TMDB.configured ? window.TMDB : null;
 })();
