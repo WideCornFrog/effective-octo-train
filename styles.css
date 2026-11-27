@@ -1888,40 +1888,40 @@ dialog.notice :focus-visible {
   border: 0;
 }
 
-/* The sheet under the artwork: hidden while the panel is shut and revealed
-   downwards as it opens, so it reads as sliding out from under the card's
-   bottom edge rather than as a block appearing over it. See the clip below. */
+/* The sheet under the artwork: shut to no height and opened to its measured
+   height, so the panel's own bottom edge — and the stroke on it — travels with
+   the sheet rather than waiting below a clip. The text keeps its full width and
+   never re-wraps; only this one panel's height changes. */
+.preview__reveal {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.preview.is-open .preview__reveal {
+  height: var(--preview-body-h, 0px);
+}
+
 .preview__body {
+  /* Very dark, but deliberately not the page's black: the sheet has to read as
+     its own surface under the artwork, and #000 would make the panel look like
+     a picture with loose text below it. This is one step up from the page —
+     black enough to sink into it, light enough to be a surface. */
+  background: #0a0a0a;
+}
+
+.preview__body-inner {
   display: grid;
   gap: 5px;
   /* The bottom padding is what puts the panel's edge past the next row's
      heading: 46px of row gap plus 36px of heading means the edge has to reach
      82px below the card, and the cards themselves start at 100px. Sixteen
      here lands the edge at 86 — the whole heading is covered, and the artwork
-        below still has 14px of air. It also leaves the genre line exactly where
-   it was: the panel grows downwards, not the text upwards. The bottom matches
-   the sides at 14px, so the My List pill sits the same distance from the
-   panel's bottom edge as from its right one. */
+     below still has 14px of air. It also leaves the genre line exactly where
+     it was: the panel grows downwards, not the text upwards. The bottom matches
+     the sides at 14px, so the My List pill sits the same distance from the
+     panel's bottom edge as from its right one. */
   padding: 8px 14px 14px;
-  /* Very dark, but deliberately not the page's black: the sheet has to read as
-     its own surface under the artwork, and #000 would make the panel look like
-     a picture with loose text below it. This is one step up from the page —
-     black enough to sink into it, light enough to be a surface. */
-  background: #0a0a0a;
-  overflow: hidden;
-  /* Opened by revealing it, not by growing it. `max-height` from 0 to the
-     measured height was the obvious way to write this, and it re-laid out the
-     sheet — and the panel's own box with it — on every one of the twenty frames
-     the 0.34s took, for every card the pointer crossed. The sheet now keeps its
-     full height and is clipped from its bottom edge, so the revealed edge travels
-     down from under the artwork; the text is clipped, never reflowed, and there
-     is no layout in the animation at all: only the clip moves. */
-  clip-path: inset(0 0 100% 0);
-  transition: clip-path 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-.preview.is-open .preview__body {
-  clip-path: inset(0 0 0 0);
 }
 
 /* The last line of the sheet is the panel's own little row: duration at the
