@@ -3817,7 +3817,7 @@
     previewArt.removeAttribute('src');
     previewArt.removeAttribute('srcset');
     previewArt.removeAttribute('sizes');
-    preview.classList.remove('is-open');
+    preview.classList.remove('is-open', 'is-swiping');
     preview.hidden = true;
     preview.style.transform = '';
     preview.style.willChange = '';
@@ -3985,7 +3985,6 @@
       y: touch.clientY,
       lastX: touch.clientX,
       mode: '',
-      moved: 0,
       row: preview.__row || null,
     };
   }, { passive: true });
@@ -4007,16 +4006,16 @@
         hidePreview(0);
         return;
       }
-      // The row gets the swipe. Keep the panel up for the length of the drag so
-      // the browser keeps sending moves to it, and slide it with the card it
-      // describes: it is a fixed copy of that card, so it has to travel exactly
-      // as far as the card does. It closes on release, once the row is left on
-      // its new card. The row itself owns the snap, so it holds it off until the
-      // finger lifts.
+      // The row gets the swipe. A fixed panel travelling under the finger made
+      // the pull feel sticky, so take it out of the picture for the gesture:
+      // keep it in place, and hit-testable, so the browser keeps sending moves
+      // to this touch target, but stop painting it and let the row move
+      // directly. It closes on release, once the row is left on its new card.
       if (!panelTouch.row?.__touch?.start()) {
         hidePreview(0);
         return;
       }
+      preview.classList.add('is-swiping');
     }
     if (panelTouch.mode !== 'x' || !panelTouch.row) return;
     // Once the gesture is the row's, vertical drift must not scroll the page
@@ -4024,11 +4023,7 @@
     event.preventDefault();
     const step = touch.clientX - panelTouch.lastX;
     panelTouch.lastX = touch.clientX;
-    const moved = panelTouch.row.__touch.by(step);
-    panelTouch.moved += moved;
-    // The card moved by the change in scrollLeft; the panel is fixed, so move
-    // it by the same amount to stay on that card until the finger lets go.
-    preview.style.transform = panelTouch.moved ? `translate3d(${-panelTouch.moved}px, 0, 0)` : '';
+    panelTouch.row.__touch.by(step);
   }, { passive: false });
 
   ['touchend', 'touchcancel'].forEach((type) => {
