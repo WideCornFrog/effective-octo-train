@@ -40,6 +40,10 @@
   // still to the title's vertical poster. The script names the file to decode
   // from the same breakpoint, so a phone never waits on the wide crop.
   const HERO_VERTICAL = window.matchMedia('(max-width: 700px)');
+  // The same breakpoint as the phone billboard: below it a shelf shows two
+  // whole cards with a 15px neighbour at each edge, and the glass pagers are
+  // hidden by the stylesheet.
+  const COMPACT_SHELF = window.matchMedia('(max-width: 700px)');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let heroIndex = 0;
   // True until the catalogue answers: the billboard stays blank rather than
@@ -1758,18 +1762,19 @@
     const spacers = [document.createElement('div'), document.createElement('div')];
     spacers.forEach((el) => { el.className = 'row__gap'; el.setAttribute('aria-hidden', 'true'); });
 
-    // Geometry. A shelf is a whole number of cards plus one deliberate sliver:
-    // m cards and PEEK pixels of the next one, ending exactly on the window's
-    // edge. The count follows the window and the width takes what is left over,
-    // which is what makes the slice the same width everywhere — the window's own
-    // edge used to cut whatever fell there, 0 to 290px of a card depending on
-    // the width. Short rows keep the plain 275px card and stretch nothing, so
-    // Continue Watching still lines up with the shelves under it. The slate is
-    // wide enough to read as a card waiting there, and the pager over it is
-    // sized just inside it (see `.row__prev`), so the arrow never hangs off the
-    // slice it is drawn on.
-    const PEEK = 60;
-
+    // Geometry. A shelf is a whole number of cards plus a deliberate sliver of
+    // the neighbours, ending exactly on the window's edge. The count follows the
+    // window and the width takes what is left over, which is what makes the
+    // slices the same width everywhere — the window's own edge used to cut
+    // whatever fell there, 0 to 290px of a card depending on the width. Short
+    // rows keep the plain 275px card and stretch nothing, so Continue Watching
+    // still lines up with the shelves under it.
+    //
+    // A phone is the one fixed case: two whole cards and 15px of each neighbour.
+    // The pagers are hidden there, so the slices are not handles to sit an arrow
+    // on — they are the cue that the row keeps going, small enough that two
+    // whole cards fit cleanly. Wider windows keep the 60px slice the pagers live
+    // on and pick the count nearest the 275px card token.
     const layout = (snap = true) => {
       gapCache = 0;
       viewportW = track.clientWidth;
@@ -1778,6 +1783,8 @@
       const g = gap();
       const n = items.length;
       if (!viewport || !n) return;
+      const compact = COMPACT_SHELF.matches;
+      const PEEK = compact ? 15 : 60;
       // Which card leads right now, in the geometry being replaced, so a resize
       // keeps the row where it was instead of parking it a fraction of a card
       // off a rest slot.
@@ -1791,13 +1798,16 @@
       // The width depends on the window, not on how many items a row has, so
       // every shelf is made of the same card: a short row simply ends early
       // instead of painting bigger cards than the rows under it.
-      let best = 1;
-      let bestCost = Infinity;
-      for (let count = 1; count <= 12; count += 1) {
-        const w = widthFor(count);
-        // Nearest the token size wins; a card far below it is never worth it.
-        const cost = Math.abs(w - MIN_CARD) + (w < 200 ? 1000 : 0);
-        if (cost < bestCost) { bestCost = cost; best = count; }
+      let best = 2;
+      if (!compact) {
+        let bestCost = Infinity;
+        best = 1;
+        for (let count = 1; count <= 12; count += 1) {
+          const w = widthFor(count);
+          // Nearest the token size wins; a card far below it is never worth it.
+          const cost = Math.abs(w - MIN_CARD) + (w < 200 ? 1000 : 0);
+          if (cost < bestCost) { bestCost = cost; best = count; }
+        }
       }
       cardW = Math.max(1, Math.round(widthFor(best)));
       stride = cardW + g;
@@ -2340,6 +2350,11 @@
     // so a row painted a fraction of a pixel shorter while it scrolled and
     // came back to its full height at rest.
 
+    // A touch drag on the hover panel drives the row from outside this closure;
+    // while it is down, scrollend must not settle the strip under the finger.
+    let touchPulling = false;
+    let touchBehavior = null;
+
     const onScrollEnd = () => {
       // A glide in flight ends in a scrollend of its own on every frame; the
       // glide finishes the movement and calls this again when it is done.
@@ -2353,7 +2368,7 @@
       // yet. Instant scroll frames end in a scrollend each, so settling mid-
       // gesture would snap the strip back under the pointer once per frame;
       // both settle when the gesture is over instead.
-      if (drag || performance.now() < wheelQuietUntil || performance.now() < walkingUntil) return;
+      if (drag || touchPulling || performance.now() < wheelQuietUntil || performance.now() < walkingUntil) return;
       settle();
     };
 
@@ -2760,6 +2775,42 @@
       // so a scroll that keeps going has somewhere to go.
       if (shift) lapTo(shift, wanted + shift);
       else track.scrollTo({ left: Math.max(0, Math.min(cap, wanted)), behavior: 'smooth' });
+    };
+
+    // The same pull, driven by a touch that started on the hover panel. The
+    // panel is fixed beside the track, not inside it, so the browser cannot pan
+    // the track from there: the panel's touch driver hands each step in here.
+    // The row owns the snap, so it waits until the finger lifts (touchPulling)
+    // rather than settling on every scrollend the writes produce.
+    row.__touch = {
+      start: () => {
+        if (!runs()) return false;
+        stopGlide();
+        aim = null;
+        touchPulling = true;
+        touchBehavior = track.style.scrollBehavior;
+        track.style.scrollBehavior = 'auto';
+        return true;
+      },
+      // `step` is the finger's movement this event (left is negative). One
+      // scrollLeft step goes the other way, as a native pan does.
+      by: (step) => {
+        if (!touchPulling || !step) return 0;
+        const before = track.scrollLeft;
+        const cap = maxScroll();
+        const wanted = before - step;
+        const shift = lapShift(wanted, cap);
+        if (shift) lapTo(shift, wanted + shift);
+        else track.scrollLeft = Math.max(0, Math.min(cap, wanted));
+        return track.scrollLeft - before;
+      },
+      end: () => {
+        if (!touchPulling) return;
+        touchPulling = false;
+        track.style.scrollBehavior = touchBehavior || '';
+        touchBehavior = null;
+        onScrollEnd();
+      },
     };
 
     let resizePending = false;
@@ -3852,15 +3903,19 @@
 
   // A touch screen opens the same panel with a tap: there is no hover to open
   // it with, and no pointerout to close it. A tap on a card shows it, a tap
-  // anywhere else puts it away, and a swipe closes it through the scroll
-  // listener below. The card kept here also lets a panel whose facts are still
+  // anywhere else puts it away, and a horizontal swipe pulls the row it grew
+  // from (see the touch driver below). The card kept here also lets a panel whose facts are still
   // on the wire open when they land, rather than waiting for a hover a touch
   // screen never sends.
   const COARSE_POINTER = window.matchMedia('(hover: none), (pointer: coarse)');
   let tapPending = null;
+  // A drag that came off the panel is not a tap on whatever is left under the
+  // finger when it ends. Short enough that a deliberate tap right after still
+  // counts.
+  let swallowTapUntil = 0;
 
   document.addEventListener('click', (event) => {
-    if (!COARSE_POINTER.matches) return;
+    if (!COARSE_POINTER.matches || performance.now() < swallowTapUntil) return;
     tapPending = null;
     const card = event.target.closest?.('.card');
     if (card) {
@@ -3869,9 +3924,94 @@
       if (target !== hoveredCard) showPreview(card);
       return;
     }
-    // The panel's own controls are part of the panel, not a tap outside it.
-    if (event.target.closest?.('#card-preview')) return;
+    // The panel is the card, grown: a touch on it is a touch on the card, and
+    // a tap there is how a phone puts it away. Its one control keeps its own
+    // tap, so My List still works.
+    if (event.target.closest?.('#card-preview')) {
+      if (event.target.closest('button, a')) return;
+      hidePreview(0);
+      return;
+    }
     hidePreview(0);
+  });
+
+  // A touch that starts on the panel can belong to the page or to the row:
+  // vertical swipes scroll the page, horizontal ones pull the active row.
+  // The browser cannot do the horizontal one itself — the panel is fixed beside
+  // the track, not inside it — so the row is moved here, under the finger, at
+  // the rate the track would move natively. The panel goes away first: it is a
+  // fixed copy of one card and would otherwise hang over a row that has moved.
+  let panelTouch = null;
+
+  preview.addEventListener('touchstart', (event) => {
+    const touch = event.touches[0];
+    if (!touch || panelTouch) return;
+    panelTouch = {
+      id: touch.identifier,
+      x: touch.clientX,
+      y: touch.clientY,
+      lastX: touch.clientX,
+      mode: '',
+      moved: 0,
+      row: preview.__row || null,
+    };
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (event) => {
+    if (!panelTouch) return;
+    const touch = Array.from(event.touches).find((item) => item.identifier === panelTouch.id);
+    if (!touch) return;
+    const dx = touch.clientX - panelTouch.x;
+    const dy = touch.clientY - panelTouch.y;
+    if (!panelTouch.mode) {
+      // A tap's jitter stays under this; a drag is past it.
+      if (Math.hypot(dx, dy) < 10) return;
+      panelTouch.mode = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      swallowTapUntil = performance.now() + 350;
+      if (panelTouch.mode === 'y') {
+        // The page gets the swipe; the panel is a fixed sheet and cannot follow
+        // it, so it goes away and lets the page move.
+        hidePreview(0);
+        return;
+      }
+      // The row gets the swipe. Keep the panel up for the length of the drag so
+      // the browser keeps sending moves to it, and slide it with the card it
+      // describes: it is a fixed copy of that card, so it has to travel exactly
+      // as far as the card does. It closes on release, once the row is left on
+      // its new card. The row itself owns the snap, so it holds it off until the
+      // finger lifts.
+      if (!panelTouch.row?.__touch?.start()) {
+        hidePreview(0);
+        return;
+      }
+    }
+    if (panelTouch.mode !== 'x' || !panelTouch.row) return;
+    // Once the gesture is the row's, vertical drift must not scroll the page
+    // underneath it as well.
+    event.preventDefault();
+    const step = touch.clientX - panelTouch.lastX;
+    panelTouch.lastX = touch.clientX;
+    const moved = panelTouch.row.__touch.by(step);
+    panelTouch.moved += moved;
+    // The card moved by the change in scrollLeft; the panel is fixed, so move
+    // it by the same amount to stay on that card until the finger lets go.
+    preview.style.transform = panelTouch.moved ? `translate3d(${-panelTouch.moved}px, 0, 0)` : '';
+  }, { passive: false });
+
+  ['touchend', 'touchcancel'].forEach((type) => {
+    document.addEventListener(type, () => {
+      if (!panelTouch) return;
+      // Freeze out the click a drag can leave behind on the card under the
+      // finger. Timed from the release, so a slow drag is covered too.
+      if (panelTouch.mode) swallowTapUntil = performance.now() + 350;
+      // A horizontal drag has moved the row out from under the panel; a
+      // vertical one has already hidden it. Either way the panel is done.
+      if (panelTouch.mode === 'x') {
+        panelTouch.row?.__touch?.end();
+        closePreview();
+      }
+      panelTouch = null;
+    }, { passive: true });
   });
 
   // A row scrolling re-creates the cards under the pointer, and a resize moves
@@ -3911,6 +4051,10 @@
     // A tap-opened card that has scrolled away is no longer the card the
     // reader chose; its details landing must not reopen the panel.
     tapPending = null;
+    // The one scroll the panel drives itself: a horizontal touch drag moves the
+    // row under it, and the panel travels with its card until the finger lifts.
+    // Hiding the touch target mid-gesture would stop the pull after one move.
+    if (panelTouch?.mode === 'x') return;
     hidePreview(0);
   }, true);
   window.addEventListener('scroll', landOnPointer, true);
