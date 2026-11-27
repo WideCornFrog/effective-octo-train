@@ -2166,8 +2166,10 @@ body.is-seeing-all .row:not(.seeall) { display: none; }
 .seeall__grid {
   display: grid;
   /* Columns of at least 220px: five across at 1280, six at 1600, and fewer as
-     the window narrows, without a breakpoint for any of them. */
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+     the window narrows, without a breakpoint for any of them. The floor gives
+     way once half the grid is under 220px, so the thinnest windows still lay
+     two cards across instead of dropping to one. */
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, calc((100% - var(--gap)) / 2)), 1fr));
   /* Columns stay tight; the rows part company. The row gap is measured from the
      shelf rows on the Home page — card to card, 89px — so the grid breathes at
      the same rhythm as the rows it replaces. A hovered card's sheet hangs 85px
@@ -2872,6 +2874,56 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
   }
 
   .search.is-open .search__field { gap: 8px; }
+
+  /* The billboard wears a phone's cover: the title's vertical poster in place
+     of the 16:9 still. At this width the artwork column is narrow, and a
+     backdrop there is a letterbox strip beside the copy; a poster is the shape
+     a cover is made in. The script puts both crops on the stage, so the
+     stylesheet only has to choose one — and a title with no poster keeps the
+     still through the fallback. */
+  .hero__media {
+    aspect-ratio: 2 / 3;
+    background-image: var(--art-portrait, var(--art));
+  }
+}
+
+/* Phones: the facts line is wider than the copy column, so its rating chip runs
+   out over the artwork column and prints on the cover. The cover is moved down
+   past that row without taking any room in the grid: a relative offset moves
+   the picture alone, so the actions stay directly under the description instead
+   of being pushed down by the artwork's height, and the copy keeps the place it
+   had. The offset is measured against the tallest title logo's facts line, not
+   the shortest. */
+@media (max-width: 560px) {
+  /* The hero ends with the actions instead of carrying its own trailing pad:
+     the shelf below starts right where the hero's last row does, so the rows
+     come up without the copy, actions or cover moving. */
+  .hero { padding-bottom: 0; }
+
+  .hero__stage {
+    margin-top: 0;
+    margin-bottom: 0;
+    top: clamp(120px, 30vw, 150px);
+  }
+
+  /* The dots shared the cover's row; with the cover moved down they would sit
+     on it. They move to the row below, still under its column, clear of its
+     bottom and in the place they had beside the actions. */
+  .hero__pills {
+    grid-row: 3;
+    margin-top: 24px;
+  }
+}
+
+/* While the action stack is taller than the cover, the dots fit back into the
+   actions' own row, at its bottom: that drops their extra row and lifts the
+   shelves below with it, while the cover's bottom is still clear above them. */
+@media (max-width: 508px) {
+  .hero__pills {
+    grid-row: 2;
+    align-self: end;
+    margin-top: 0;
+  }
 }
 
 /* Below this the bell is the first thing to go: the field and the account are
