@@ -1765,6 +1765,12 @@ dialog.notice :focus-visible {
 
 .preview.is-open { pointer-events: auto; }
 
+/* A horizontal pull on a touch screen belongs to the row, and the panel is
+   about to close. It stays in place and hit-testable so the browser keeps
+   delivering the gesture to it, but stops painting: a full-size fixed sheet
+   following the finger was what made the pull feel sticky. */
+.preview.is-swiping { opacity: 0; }
+
 /* The stroke for the whole shape — artwork and sheet — as its own layer, drawn
    exactly the way every other hover ring is drawn: an inset shadow, not a
    border. A fractional border is snapped to whole device pixels, and along a
@@ -1981,6 +1987,11 @@ dialog.notice :focus-visible {
   align-items: center;
   gap: 0.5em;
 }
+
+/* On the one-line desktop sheet the certificate and score are ordinary
+   siblings of the tags; the phone sheet gives this wrapper its own flex row so
+   a short certificate does not leave a grid-column gap before the score. */
+.preview__cert-rating { display: contents; }
 
 /* Nothing at the smallest size fits — a font far wider than any system ships,
    or a panel narrower than a card — so the chips wrap inside their own group
@@ -2966,29 +2977,25 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
     padding: 8px 10px 10px;
   }
 
-  /* A two-by-two facts grid. The tags wrapper is dissolved so the kind,
-     release and certificate become cells themselves; the explicit rows keep
-     the pairing, and auto columns close the gap when a title has no
-     certificate or no release label to print. */
+  /* Two rows of facts, each laid out on its own. Shared grid columns aligned
+     the score under the release and left white space after certificates
+     shorter than PG-13; flex rows keep the certificate and score together
+     whatever their widths. */
   #card-preview .preview__facts {
-    display: grid;
-    grid-template-columns: auto auto;
-    justify-content: start;
-    align-items: center;
-    gap: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
     font-size: 12px;
     min-width: 0;
   }
 
-  #card-preview .preview__tags { display: contents; }
-
-  #card-preview .preview__kind,
-  #card-preview .preview__release { grid-row: 1; }
-
-  #card-preview .preview__cert,
-  #card-preview .preview__rating { grid-row: 2; }
-
-  #card-preview .preview__rating { justify-self: start; }
+  #card-preview .preview__tags,
+  #card-preview .preview__cert-rating {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 
   /* A little less air inside each chip gives the longest release labels room
      beside the kind at this width. */
@@ -3020,9 +3027,11 @@ body.is-seeing-all .seeall.is-veiled .seeall__more {
   #card-preview .preview__body-inner { padding: 8px 8px 10px; }
 
   #card-preview .preview__facts {
-    gap: 4px 3px;
+    gap: 4px;
     font-size: 9px;
   }
+
+  #card-preview .preview__tags { gap: 3px; }
 
   #card-preview .preview__kind,
   #card-preview .preview__release,
